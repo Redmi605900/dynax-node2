@@ -47,7 +47,7 @@ class DYNAXNode:
     def __init__(self):
         self.chain = []
         self.mempool = []
-        self.peers = []
+        self.peers = ["https://dynax-website-2.onrender.com"]
         self.load_chain()
 
     def save_chain(self):
