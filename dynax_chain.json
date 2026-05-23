@@ -1,0 +1,72 @@
+[
+  {
+    "index": 0,
+    "timestamp": 1779549153,
+    "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "transactions": [
+      {
+        "from": "GENESIS",
+        "to": "DX5293ada2aa014167fa15942c4318b6235fe7d1",
+        "amount": 300000
+      },
+      {
+        "from": "GENESIS",
+        "to": "DXf2a9fc9e0b20602d66af8ecae2032f0e56c20f",
+        "amount": 7000
+      },
+      {
+        "from": "GENESIS",
+        "to": "DX8a6e18a35d23368fa553f87552693d91f58ce6",
+        "amount": 445
+      },
+      {
+        "from": "GENESIS",
+        "to": "DX9ac31f667d87ec3a5940ac409d9a54de8b0507",
+        "amount": 137
+      }
+    ],
+    "nonce": 0,
+    "hash": "a600a02a0e024f569005668c2b473f0a1b34257c0af1b192c20cc996a76f0232",
+    "tx_count": 4
+  },
+  {
+    "index": 1,
+    "timestamp": 1779549442,
+    "prev_hash": "a600a02a0e024f569005668c2b473f0a1b34257c0af1b192c20cc996a76f0232",
+    "transactions": [
+      {
+        "from": "NETWORK",
+        "to": "DX5293ada2aa014167fa15942c4318b6235fe7d1",
+        "amount": 50,
+        "txid": "7e79df2ab505777e8a363bbfb0dc49349c87362bf84d57ec89bdf319a28798e4"
+      }
+    ],
+    "nonce": 70448,
+    "hash": "0000459cc8459323499bab349db0c60d596846712ae49d14eb858c8318baa6d7",
+    "tx_count": 1
+  },
+  {
+    "index": 2,
+    "timestamp": 1779550410,
+    "prev_hash": "0000459cc8459323499bab349db0c60d596846712ae49d14eb858c8318baa6d7",
+    "transactions": [
+      {
+        "from": "NETWORK",
+        "to": "DX5293ada2aa014167fa15942c4318b6235fe7d1",
+        "amount": 50,
+        "txid": "da1095554714d28de2576d78fe8bc3be5eb1e56919e836c133f2ea0aaed220f8"
+      },
+      {
+        "from": "DX5293ada2aa014167fa15942c4318b6235fe7d1",
+        "to": "DXf2a9fc9e0b20602d66af8ecae2032f0e56c20f",
+        "amount": 25,
+        "signature": "3e143594e85e2a6039352bc7b8ccacb8f78fa7b4ec35e3eb627825c10210380a",
+        "txid": "832b6fbc91d8184f402e8f0ff4b17cb5827939723d004824bd6472cdddacdbf2",
+        "timestamp": 1779550333
+      }
+    ],
+    "nonce": 81479,
+    "hash": "0000e190672964c1f16d79ac4c4e4fa7564a1649628988d660c4e425fee649a4",
+    "tx_count": 2
+  }
+]
