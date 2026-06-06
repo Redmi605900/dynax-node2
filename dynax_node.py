@@ -14,6 +14,10 @@ PEERS_FILE = os.path.expanduser("~/dynax_peers.json")
 DIFFICULTY = 4
 BLOCK_REWARD = 50
 SECRET_KEY = "DYNAX_SECRET_v1"
+
+def pubkey_to_address(public_key_hex):
+    pub_bytes = binascii.unhexlify(public_key_hex)
+    return "DX" + hashlib.sha3_256(pub_bytes).hexdigest()[:40]
 PORT = int(os.environ.get("PORT", 6001))
 
 # ─────────────────────────────────────────────
@@ -81,12 +85,10 @@ class DYNAXNode:
     def load_chain(self):
         if not os.path.exists(CHAIN_FILE):
             genesis_txs = [
-                {"from": "GENESIS", "to": "DX300b89357df0bd3d42ee24d0305c98a7fe1a8ba5885a8016b2fa5f742b5f427ca4f0343f299bb4e6ea29e12ebc9564e79fc4be0281847d1c93089dcbc545293c", "amount": 300000},
-                {"from": "GENESIS", "to": "DX4d5e1f2e511e2eeff12319676ef1da8a037a68a739bcb222b2f9066a8d4643b6a5f964e71953bdfdabee50790c533ee849f7bbde2a904f08c53e3d0903985f73", "amount": 7000},
-                {"from": "GENESIS", "to": "DX69c6ff91c95622444b69d35af7f95ac7b7422c81ddf8a4a08a138de5428c1b376e876a523c593610bb9168f6f743b27d4fba5c1fd0d7bf7b567e7df97c0bbb9b", "amount": 445},
-                {"from": "GENESIS", "to": "DX7183f5718aede7299e3e8f8e23b94b96a601d36d50632b75238b710049d29871bb0ddb116f3fb9d84a284640a5ca3742620f9eb1894a76aa4ff645a639f86f1b", "amount": 137}
-
-
+                {"from": "GENESIS", "to": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3", "amount": 300000},
+                {"from": "GENESIS", "to": "DX2cd2db91dd4e11e56b3a90e8219b9b11f16d498d", "amount": 7000},
+                {"from": "GENESIS", "to": "DXb2913cfc7756e6675fadbcb35cd595e680b330d3", "amount": 445},
+                {"from": "GENESIS", "to": "DXe0e2eb885049e91123a0ab6f4bf62064d4572170", "amount": 137}
             ]
             genesis = Block(0, "0" * 64, genesis_txs)
             self.chain.append(genesis)
@@ -200,7 +202,7 @@ class DYNAXNode:
 
     # ── Transaction ──────────────────────────
     def add_transaction(self, tx):
-        for field in ["from", "to", "amount", "signature"]:
+        for field in ["from", "to", "amount", "signature", "public_key"]:
             if field not in tx:
                 return {"success": False, "error": f"missing {field}"}
         if tx["amount"] <= 0:
@@ -213,10 +215,15 @@ class DYNAXNode:
         message = json.dumps(tx_canonical, sort_keys=True).encode()
 
         # ── ECDSA Signature Verification ─────────
+        if "public_key" not in tx:
+            return {"success": False, "error": "missing public_key"}
         try:
-            pub_hex = tx["from"][2:]  # ตัด prefix "DX" ออก
+            # ตรวจว่า public_key ตรงกับ address
+            expected_address = pubkey_to_address(tx["public_key"])
+            if expected_address != tx["from"]:
+                return {"success": False, "error": "public_key does not match address"}
             vk = ecdsa.VerifyingKey.from_string(
-                binascii.unhexlify(pub_hex),
+                binascii.unhexlify(tx["public_key"]),
                 curve=ecdsa.SECP256k1,
                 hashfunc=hashlib.sha256
             )
@@ -293,7 +300,7 @@ class DYNAXNode:
         return {
             "name": "DYNAX",
             "symbol": "DYX",
-            "version": "2.2.0",
+            "version": "2.3.0",
             "blocks": len(self.chain),
             "mempool": len(self.mempool),
             "peers": len(self.peers),
@@ -434,14 +441,7 @@ def consensus():
 
 # ═════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=== DYNAX Node v2.2.0 ===")
+    print("=== DYNAX Node v2.3.0 ===")
     print(json.dumps(node.info(), indent=2))
     print(f"\n🌐 Running on http://0.0.0.0:{PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False)
-
-
-
-
-
-
-
