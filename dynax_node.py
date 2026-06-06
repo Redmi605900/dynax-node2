@@ -5,9 +5,12 @@ import requests
 import os
 import hmac
 import threading
+import ecdsa
+import binascii
 from flask import Flask, request, jsonify, make_response
 
 CHAIN_FILE = os.path.expanduser("~/dynax_chain.json")
+PEERS_FILE = os.path.expanduser("~/dynax_peers.json")
 DIFFICULTY = 4
 BLOCK_REWARD = 50
 SECRET_KEY = "DYNAX_SECRET_v1"
@@ -54,19 +57,36 @@ class DYNAXNode:
         self.peers = set()   # ใช้ set เพื่อกัน duplicate
         self.lock = threading.Lock()
         self.load_chain()
+        self.load_peers()
+        # auto-sync หลัง boot (รอ 3 วิให้ Flask พร้อมก่อน)
+        threading.Timer(3.0, self.sync_from_peers).start()
 
     # ── Persistence ──────────────────────────
     def save_chain(self):
         with open(CHAIN_FILE, "w") as f:
             json.dump([b.to_dict() for b in self.chain], f, indent=2)
 
+    def save_peers(self):
+        with open(PEERS_FILE, "w") as f:
+            json.dump(list(self.peers), f)
+
+    def load_peers(self):
+        if os.path.exists(PEERS_FILE):
+            with open(PEERS_FILE) as f:
+                peers = json.load(f)
+            for p in peers:
+                self.peers.add(p)
+            print(f"📡 Loaded {len(self.peers)} peers from file")
+
     def load_chain(self):
         if not os.path.exists(CHAIN_FILE):
             genesis_txs = [
-                {"from": "GENESIS", "to": "DX5293ada2aa014167fa15942c4318b6235fe7d1", "amount": 300000},
-                {"from": "GENESIS", "to": "DXf2a9fc9e0b20602d66af8ecae2032f0e56c20f", "amount": 7000},
-                {"from": "GENESIS", "to": "DX8a6e18a35d23368fa553f87552693d91f58ce6", "amount": 445},
-                {"from": "GENESIS", "to": "DX9ac31f667d87ec3a5940ac409d9a54de8b0507", "amount": 137}
+                {"from": "GENESIS", "to": "DX300b89357df0bd3d42ee24d0305c98a7fe1a8ba5885a8016b2fa5f742b5f427ca4f0343f299bb4e6ea29e12ebc9564e79fc4be0281847d1c93089dcbc545293c", "amount": 300000},
+                {"from": "GENESIS", "to": "DX4d5e1f2e511e2eeff12319676ef1da8a037a68a739bcb222b2f9066a8d4643b6a5f964e71953bdfdabee50790c533ee849f7bbde2a904f08c53e3d0903985f73", "amount": 7000},
+                {"from": "GENESIS", "to": "DX69c6ff91c95622444b69d35af7f95ac7b7422c81ddf8a4a08a138de5428c1b376e876a523c593610bb9168f6f743b27d4fba5c1fd0d7bf7b567e7df97c0bbb9b", "amount": 445},
+                {"from": "GENESIS", "to": "DX7183f5718aede7299e3e8f8e23b94b96a601d36d50632b75238b710049d29871bb0ddb116f3fb9d84a284640a5ca3742620f9eb1894a76aa4ff645a639f86f1b", "amount": 137}
+
+
             ]
             genesis = Block(0, "0" * 64, genesis_txs)
             self.chain.append(genesis)
@@ -165,6 +185,7 @@ class DYNAXNode:
     def add_peer(self, peer_url):
         peer_url = peer_url.rstrip("/")
         self.peers.add(peer_url)
+        self.save_peers()
 
     # ── Balance ──────────────────────────────
     def get_balance(self, address):
@@ -190,11 +211,46 @@ class DYNAXNode:
 
         tx_canonical = {"from": tx["from"], "to": tx["to"], "amount": tx["amount"]}
         message = json.dumps(tx_canonical, sort_keys=True).encode()
-        expected_sig = hmac.new(SECRET_KEY.encode(), message, hashlib.sha3_256).hexdigest()
-        if expected_sig != tx["signature"]:
-            return {"success": False, "error": "invalid signature"}
 
-        tx["txid"] = hashlib.sha3_256(json.dumps(tx_canonical, sort_keys=True).encode()).hexdigest()
+        # ── ECDSA Signature Verification ─────────
+        try:
+            pub_hex = tx["from"][2:]  # ตัด prefix "DX" ออก
+            vk = ecdsa.VerifyingKey.from_string(
+                binascii.unhexlify(pub_hex),
+                curve=ecdsa.SECP256k1,
+                hashfunc=hashlib.sha256
+            )
+            sig_bytes = binascii.unhexlify(tx["signature"])
+            if not vk.verify(sig_bytes, message):
+                return {"success": False, "error": "invalid signature"}
+        except Exception as e:
+            return {"success": False, "error": f"signature error: {str(e)}"}
+        # ─────────────────────────────────────────
+
+        txid = hashlib.sha3_256(json.dumps(tx_canonical, sort_keys=True).encode()).hexdigest()
+
+        # ── Double-spend protection ──────────────
+        # 1. เช็คใน mempool
+        for pending in self.mempool:
+            if pending.get("txid") == txid:
+                return {"success": False, "error": "tx already in mempool"}
+
+        # 2. เช็คใน chain
+        for block in self.chain:
+            for confirmed in block.transactions:
+                if confirmed.get("txid") == txid:
+                    return {"success": False, "error": "tx already confirmed"}
+
+        # 3. เช็ค balance รวม pending ใน mempool
+        pending_out = sum(
+            t["amount"] for t in self.mempool
+            if t.get("from") == tx["from"]
+        )
+        if balance - pending_out < tx["amount"] and tx["from"] != "GENESIS":
+            return {"success": False, "error": f"insufficient balance (including pending): {balance - pending_out}"}
+        # ─────────────────────────────────────────
+
+        tx["txid"] = txid
         tx["timestamp"] = int(time.time())
         self.mempool.append(tx)
         return {"success": True, "txid": tx["txid"]}
@@ -237,7 +293,7 @@ class DYNAXNode:
         return {
             "name": "DYNAX",
             "symbol": "DYX",
-            "version": "2.0.0",
+            "version": "2.2.0",
             "blocks": len(self.chain),
             "mempool": len(self.mempool),
             "peers": len(self.peers),
@@ -378,7 +434,14 @@ def consensus():
 
 # ═════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=== DYNAX Node v2.0.0 ===")
+    print("=== DYNAX Node v2.2.0 ===")
     print(json.dumps(node.info(), indent=2))
     print(f"\n🌐 Running on http://0.0.0.0:{PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False)
+
+
+
+
+
+
+
