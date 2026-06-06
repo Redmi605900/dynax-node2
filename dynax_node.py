@@ -1,3 +1,4 @@
+
 import time
 import json
 import hashlib
@@ -13,6 +14,8 @@ CHAIN_FILE = os.path.expanduser("~/dynax_chain.json")
 PEERS_FILE = os.path.expanduser("~/dynax_peers.json")
 DIFFICULTY = 4
 BLOCK_REWARD = 50
+TARGET_BLOCK_TIME = 12   # วินาที
+ADJUSTMENT_INTERVAL = 10  # ปรับทุก 10 blocks
 SECRET_KEY = "DYNAX_SECRET_v1"
 
 def pubkey_to_address(public_key_hex):
@@ -23,12 +26,13 @@ PORT = int(os.environ.get("PORT", 6001))
 # ─────────────────────────────────────────────
 class Block:
 # ─────────────────────────────────────────────
-    def __init__(self, index, prev_hash, txs, nonce=0):
+    def __init__(self, index, prev_hash, txs, nonce=0, difficulty=DIFFICULTY):
         self.index = index
         self.timestamp = int(time.time())
         self.prev_hash = prev_hash
         self.transactions = txs
         self.nonce = nonce
+        self.difficulty = difficulty
         self.hash = self.calculate_hash()
 
     def calculate_hash(self):
@@ -48,6 +52,7 @@ class Block:
             "prev_hash": self.prev_hash,
             "transactions": self.transactions,
             "nonce": self.nonce,
+            "difficulty": self.difficulty,
             "hash": self.hash,
             "tx_count": len(self.transactions)
         }
@@ -85,10 +90,10 @@ class DYNAXNode:
     def load_chain(self):
         if not os.path.exists(CHAIN_FILE):
             genesis_txs = [
-                {"from": "GENESIS", "to": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3", "amount": 300000},
-                {"from": "GENESIS", "to": "DX2cd2db91dd4e11e56b3a90e8219b9b11f16d498d", "amount": 7000},
-                {"from": "GENESIS", "to": "DXb2913cfc7756e6675fadbcb35cd595e680b330d3", "amount": 445},
-                {"from": "GENESIS", "to": "DXe0e2eb885049e91123a0ab6f4bf62064d4572170", "amount": 137}
+                {"from": "GENESIS", "to": pubkey_to_address("300b89357df0bd3d42ee24d0305c98a7fe1a8ba5885a8016b2fa5f742b5f427ca4f0343f299bb4e6ea29e12ebc9564e79fc4be0281847d1c93089dcbc545293c"), "amount": 300000},
+                {"from": "GENESIS", "to": pubkey_to_address("4d5e1f2e511e2eeff12319676ef1da8a037a68a739bcb222b2f9066a8d4643b6a5f964e71953bdfdabee50790c533ee849f7bbde2a904f08c53e3d0903985f73"), "amount": 7000},
+                {"from": "GENESIS", "to": pubkey_to_address("69c6ff91c95622444b69d35af7f95ac7b7422c81ddf8a4a08a138de5428c1b376e876a523c593610bb9168f6f743b27d4fba5c1fd0d7bf7b567e7df97c0bbb9b"), "amount": 445},
+                {"from": "GENESIS", "to": pubkey_to_address("7183f5718aede7299e3e8f8e23b94b96a601d36d50632b75238b710049d29871bb0ddb116f3fb9d84a284640a5ca3742620f9eb1894a76aa4ff645a639f86f1b"), "amount": 137}
             ]
             genesis = Block(0, "0" * 64, genesis_txs)
             self.chain.append(genesis)
@@ -101,7 +106,8 @@ class DYNAXNode:
         for item in data:
             b = Block(item["index"], item["prev_hash"], item["transactions"], item["nonce"])
             b.timestamp = item["timestamp"]
-            b.hash = item["hash"]   # ← แก้ indent ที่นี่
+            b.difficulty = item.get("difficulty", DIFFICULTY)
+            b.hash = item["hash"]
             self.chain.append(b)
 
     # ── Chain helpers ─────────────────────────
@@ -124,6 +130,36 @@ class DYNAXNode:
             if curr_calc and curr_hash != curr_calc:
                 return False
         return True
+
+    # ── Difficulty Adjustment ────────────────
+    def adjust_difficulty(self):
+        if len(self.chain) % ADJUSTMENT_INTERVAL != 0:
+            return self.chain[-1].difficulty if hasattr(self.chain[-1], "difficulty") else DIFFICULTY
+
+        # เอา 10 blocks ล่าสุด
+        last = self.chain[-ADJUSTMENT_INTERVAL]
+        now  = self.chain[-1]
+        elapsed = now.timestamp - last.timestamp
+
+        current_diff = now.difficulty if hasattr(now, "difficulty") else DIFFICULTY
+
+        if elapsed == 0:
+            return current_diff
+
+        # คำนวณ difficulty ใหม่
+        expected = TARGET_BLOCK_TIME * ADJUSTMENT_INTERVAL
+        ratio = elapsed / expected
+
+        if ratio < 0.5:
+            new_diff = current_diff + 1
+        elif ratio > 2.0:
+            new_diff = max(1, current_diff - 1)
+        else:
+            new_diff = current_diff
+
+        if new_diff != current_diff:
+            print(f"⚡ Difficulty adjusted: {current_diff} → {new_diff} (elapsed={elapsed}s)")
+        return new_diff
 
     # ── P2P: Broadcast ───────────────────────
     def broadcast_block(self, block):
@@ -179,6 +215,7 @@ class DYNAXNode:
         for item in raw:
             b = Block(item["index"], item["prev_hash"], item["transactions"], item["nonce"])
             b.timestamp = item["timestamp"]
+            b.difficulty = item.get("difficulty", DIFFICULTY)
             b.hash = item["hash"]
             blocks.append(b)
         return blocks
@@ -271,10 +308,11 @@ class DYNAXNode:
             "txid": hashlib.sha3_256(f"reward_{len(self.chain)}".encode()).hexdigest()
         }
         txs = [reward_tx] + self.mempool[:]
-        block = Block(len(self.chain), self.last_block().hash, txs)
+        diff = self.adjust_difficulty()
+        block = Block(len(self.chain), self.last_block().hash, txs, difficulty=diff)
 
-        print(f"⛏️  Mining block #{block.index}...")
-        while not block.hash.startswith("0" * DIFFICULTY):
+        print(f"⛏️  Mining block #{block.index} (difficulty={diff})...")
+        while not block.hash.startswith("0" * diff):
             block.nonce += 1
             block.hash = block.calculate_hash()
 
@@ -300,7 +338,7 @@ class DYNAXNode:
         return {
             "name": "DYNAX",
             "symbol": "DYX",
-            "version": "2.3.0",
+            "version": "2.4.0",
             "blocks": len(self.chain),
             "mempool": len(self.mempool),
             "peers": len(self.peers),
@@ -441,7 +479,7 @@ def consensus():
 
 # ═════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=== DYNAX Node v2.3.0 ===")
+    print("=== DYNAX Node v2.4.0 ===")
     print(json.dumps(node.info(), indent=2))
     print(f"\n🌐 Running on http://0.0.0.0:{PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False)
