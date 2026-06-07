@@ -1,4 +1,3 @@
-
 import time
 import json
 import hashlib
@@ -13,9 +12,16 @@ from flask import Flask, request, jsonify, make_response
 CHAIN_FILE = os.path.expanduser("~/dynax_chain.json")
 PEERS_FILE = os.path.expanduser("~/dynax_peers.json")
 DIFFICULTY = 4
-BLOCK_REWARD = 50
+INITIAL_BLOCK_REWARD = 50
+HALVING_INTERVAL = 210000  # blocks
 TARGET_BLOCK_TIME = 12   # วินาที
 ADJUSTMENT_INTERVAL = 10  # ปรับทุก 10 blocks
+
+def get_block_reward(block_index):
+    halvings = block_index // HALVING_INTERVAL
+    if halvings >= 64:
+        return 0
+    return INITIAL_BLOCK_REWARD / (2 ** halvings)
 SECRET_KEY = "DYNAX_SECRET_v1"
 
 def pubkey_to_address(public_key_hex):
@@ -301,10 +307,11 @@ class DYNAXNode:
 
     # ── Mining ───────────────────────────────
     def mine(self, miner_address):
+        reward = get_block_reward(len(self.chain))
         reward_tx = {
             "from": "NETWORK",
             "to": miner_address,
-            "amount": BLOCK_REWARD,
+            "amount": reward,
             "txid": hashlib.sha3_256(f"reward_{len(self.chain)}".encode()).hexdigest()
         }
         txs = [reward_tx] + self.mempool[:]
@@ -338,12 +345,13 @@ class DYNAXNode:
         return {
             "name": "DYNAX",
             "symbol": "DYX",
-            "version": "2.4.0",
+            "version": "2.5.0",
             "blocks": len(self.chain),
             "mempool": len(self.mempool),
             "peers": len(self.peers),
             "difficulty": DIFFICULTY,
-            "reward": BLOCK_REWARD,
+            "reward": get_block_reward(len(self.chain)),
+            "next_halving": HALVING_INTERVAL - (len(self.chain) % HALVING_INTERVAL),
             "max_supply": 11000000,
             "valid": self.verify_chain()
         }
@@ -476,10 +484,39 @@ def consensus():
     replaced = node.sync_from_peers()
     return jsonify({"replaced": replaced, "length": len(node.chain)})
 
+# ── Peer Discovery ────────────────────────────
+@app.route("/peers/discover", methods=["POST"])
+def discover_peers():
+    new_peers = 0
+    for peer in list(node.peers):
+        try:
+            r = requests.get(peer + "/peers", timeout=3)
+            data = r.json()
+            for p in data.get("peers", []):
+                if p and p not in node.peers and p != request.host_url.rstrip("/"):
+                    node.add_peer(p)
+                    new_peers += 1
+        except:
+            pass
+    return jsonify({"new_peers": new_peers, "total": len(node.peers), "peers": list(node.peers)})
+
+# ── Halving info ──────────────────────────────
+@app.route("/halving")
+def halving():
+    current = len(node.chain)
+    halvings_done = current // HALVING_INTERVAL
+    return jsonify({
+        "current_block": current,
+        "halvings_done": halvings_done,
+        "current_reward": get_block_reward(current),
+        "next_halving_block": (halvings_done + 1) * HALVING_INTERVAL,
+        "blocks_until_halving": HALVING_INTERVAL - (current % HALVING_INTERVAL)
+    })
+
 
 # ═════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=== DYNAX Node v2.4.0 ===")
+    print("=== DYNAX Node v2.5.0 ===")
     print(json.dumps(node.info(), indent=2))
     print(f"\n🌐 Running on http://0.0.0.0:{PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False)
