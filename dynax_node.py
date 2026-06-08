@@ -520,3 +520,12 @@ if __name__ == "__main__":
     print(json.dumps(node.info(), indent=2))
     print(f"\n🌐 Running on http://0.0.0.0:{PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False)
+
+@app.route("/reset_chain", methods=["POST"])
+def reset_chain():
+    import os
+    if os.path.exists(CHAIN_FILE):
+        os.remove(CHAIN_FILE)
+    node.chain = []
+    node.load_chain()
+    return jsonify({"status": "reset", "blocks": len(node.chain)})
