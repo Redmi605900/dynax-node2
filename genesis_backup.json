@@ -1,0 +1,25 @@
+{
+  "network": "DYNAX",
+  "symbol": "DNX",
+  "max_supply": 11000000,
+  "difficulty": 4,
+  "block_reward": 50,
+  "genesis_wallets": [
+    {
+      "address": "DX5293ada2aa014167fa15942c4318b6235fe7d1",
+      "amount": 3000000
+    },
+    {
+      "address": "DXf2a9fc9e0b20602d66af8ecae2032f0e56c20f",
+      "amount": 3000000
+    },
+    {
+      "address": "DX8a6e18a35d23368fa553f87552693d91f58ce6",
+      "amount": 3000000
+    },
+    {
+      "address": "DX9ac31f667d87ec3a5940ac409d9a54de8b0507",
+      "amount": 2000000
+    }
+  ]
+}

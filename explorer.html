@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DYNAX Explorer</title>
+  <style>
+    body { font-family: Arial; background:#0b0f1a; color:white; padding:20px; }
+    .card { background:#111827; padding:15px; margin:10px 0; border-radius:10px; }
+    button { padding:10px; background:#3b82f6; border:0; color:white; border-radius:5px; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+
+<body>
+
+<h2>⚡ DYNAX Explorer (REAL NODE)</h2>
+
+<button onclick="loadChain()">🔄 Refresh Chain</button>
+
+<div class="card">
+  <h3>📦 Latest Chain</h3>
+  <pre id="chain"></pre>
+</div>
+
+<div class="card">
+  <h3>💰 Balance Check</h3>
+  <input id="addr" placeholder="DX address">
+  <button onclick="checkBalance()">Check</button>
+  <pre id="bal"></pre>
+</div>
+
+<script>
+const API = "http://127.0.0.1:6002";
+
+async function loadChain(){
+  const res = await fetch(API + "/chain");
+  const data = await res.json();
+  document.getElementById("chain").innerText =
+    JSON.stringify(data, null, 2);
+}
+
+async function checkBalance(){
+  const addr = document.getElementById("addr").value;
+  const res = await fetch(API + "/balance/" + addr);
+  const data = await res.json();
+  document.getElementById("bal").innerText =
+    JSON.stringify(data, null, 2);
+}
+</script>
+
+</body>
+</html>

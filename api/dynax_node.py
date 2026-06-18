@@ -6,7 +6,9 @@ import hmac
 import socket
 import threading
 from flask import Flask, request, jsonify
-
+MAX_SUPPLY = 11000000
+BLOCK_REWARD = 50
+SYMBOL = "DYX"
 CHAIN_FILE = "dynax_chain.json"
 DIFFICULTY = 4
 BLOCK_REWARD = 50
@@ -47,7 +49,7 @@ class DYNAXNode:
     def __init__(self):
         self.chain = []
         self.mempool = []
-        self.peers = ["https://dynax-website-2.onrender.com"]
+        self.peers = []
         self.load_chain()
 
     def save_chain(self):
@@ -145,7 +147,7 @@ class DYNAXNode:
 
     def info(self):
         return {
-            "name": "DYNAX",
+            "name": "DYNAX", 
             "symbol": "DYX",
             "version": "1.0.0",
             "blocks": len(self.chain),
@@ -208,7 +210,26 @@ def mine(address):
 @app.route("/peers")
 def peers():
     return jsonify({"peers": node.peers})
+@app.route("/add_peer", methods=["POST"])
+def add_peer():
+    data = request.get_json()
 
+    peer = data.get("peer")
+
+    if not peer:
+        return jsonify({
+            "success": False,
+            "error": "missing peer"
+        })
+
+    if peer not in node.peers:
+        node.peers.append(peer)
+
+    return jsonify({
+        "success": True,
+        "peers": node.peers
+
+    })
 if __name__ == "__main__":
     print("=== DYNAX Node v1.0.0 ===")
     print(json.dumps(node.info(), indent=2))
