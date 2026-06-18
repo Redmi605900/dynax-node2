@@ -123,7 +123,7 @@ def balance(addr): return jsonify({"address": addr, "balance": node.balance(addr
 def mine(miner): return jsonify(node.mine(miner))
 
 @app.route("/")
-def home(): return jsonify({"network": "DYNAX v20 Secure", "blocks": len(node.chain)})
+def home(): return jsonify({"network": "DYNAX v20 Secure", "version": "20.0", "blocks": len(node.chain), "mempool": len(node.mempool), "peers": len(node.peers)})
 
 
 @app.route("/wallet")
