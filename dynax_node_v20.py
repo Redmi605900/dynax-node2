@@ -35,6 +35,20 @@ class DynaxNode:
         self.CHAIN_FILE = "dynax_chain.json"
         self.load_chain()
 
+# Load chain from backup if exists
+import os
+if os.path.exists('chain_backup.json'):
+    try:
+        with open('chain_backup.json', 'r') as f:
+            backup_chain = json.load(f)
+            if isinstance(backup_chain, list) and len(backup_chain) > len(blockchain):
+                blockchain.clear()
+                blockchain.extend(backup_chain)
+                print(f"Loaded {len(blockchain)} blocks from chain_backup.json")
+    except Exception as e:
+        print(f"Error loading backup: {e}")
+
+
     def load_chain(self):
         if os.path.exists(self.CHAIN_FILE):
             try:
@@ -44,7 +58,18 @@ class DynaxNode:
         else: self.create_genesis()
 
     def create_genesis(self):
-        genesis = {"index": 0, "timestamp": int(time.time()), "transactions": [], "prev_hash": "0"*64, "nonce": 0}
+        genesis = {
+            "index": 0,
+            "timestamp": 1780771234,
+            "transactions": [
+                {"from": "GENESIS", "to": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3", "amount": 300000},
+                {"from": "GENESIS", "to": "DX2cd2db91dd4e11e56b3a90e8219b9b11f16d498d", "amount": 7000},
+                {"from": "GENESIS", "to": "DXb2913cfc7756e6675fadbcb35cd595e680b330d3", "amount": 445},
+                {"from": "GENESIS", "to": "DXe0e2eb885049e91123a0ab6f4bf62064d4572170", "amount": 137}
+            ],
+            "prev_hash": "0"*64,
+            "nonce": 0
+        }
         genesis["hash"] = hashlib.sha3_256(json.dumps(genesis, sort_keys=True).encode()).hexdigest()
         self.chain = [genesis]
         self.save_chain()
@@ -123,7 +148,7 @@ def balance(addr): return jsonify({"address": addr, "balance": node.balance(addr
 def mine(miner): return jsonify(node.mine(miner))
 
 @app.route("/")
-def home(): return jsonify({"network": "DYNAX v20 Secure", "version": "20.0", "blocks": len(node.chain), "mempool": len(node.mempool), "peers": len(node.peers)})
+def home(): return jsonify({"network": "DYNAX v20 Secure", "blocks": len(node.chain)})
 
 
 @app.route("/wallet")
@@ -290,6 +315,20 @@ def show_pending():
     })
 
 
+@app.route("/stats")
+def stats():
+    chain = bc.chain
+    txs = sum(len(bc.get_txs(b)) for b in chain)
+    return jsonify({
+        "blocks": len(chain),
+        "transactions": txs,
+        "nodes": 1,
+        "difficulty": bc.difficulty,
+        "symbol": "DYX",
+        "reward": 50,
+        "status": "online"
+    })
+
 @app.route("/peers")
 def get_peers():
     return jsonify({"peers": list(node.peers)})
@@ -334,6 +373,16 @@ def sync_chain():
         node.save_chain()
         return jsonify({"status": "synced", "blocks": len(node.chain)})
     return jsonify({"status": "already longest", "blocks": len(node.chain)})
+
+
+@app.route("/assets/<path:filename>")
+def assets(filename):
+    import os
+    filepath = os.path.join("assets", filename)
+    if os.path.exists(filepath):
+        from flask import send_file
+        return send_file(filepath)
+    return "Not found", 404
 
 if __name__ == "__main__":
     print("=== DYNAX V20 SECURE NODE STARTED ===")
