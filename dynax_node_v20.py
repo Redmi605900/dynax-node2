@@ -386,4 +386,4 @@ def assets(filename):
 
 if __name__ == "__main__":
     print("=== DYNAX V20 SECURE NODE STARTED ===")
-    app.run(host="0.0.0.0", port=6002)
+    app.run(host="0.0.0.0", port=6002)# stats endpoint added
