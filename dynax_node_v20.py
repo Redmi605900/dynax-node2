@@ -35,6 +35,7 @@ class DynaxNode:
         self.CHAIN_FILE = "dynax_chain.json"
         self.load_chain()
 
+    def load_chain(self):
         if os.path.exists(self.CHAIN_FILE):
             try:
                 with open(self.CHAIN_FILE, "r") as f: self.chain = json.load(f)
