@@ -88,7 +88,6 @@ class DynaxNode:
         return {"status": "queued", "tx": tx}
 
     def mine(self, miner):
-        if not self.mempool: return {"error": "no tx"}
         reward = {"from": "SYSTEM", "to": miner, "amount": 50, "timestamp": int(time.time())}
         txs = self.mempool[:50]
         self.mempool = self.mempool[50:]
