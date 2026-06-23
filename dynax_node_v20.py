@@ -392,13 +392,6 @@ def dex():
     except:
         return "dex.html not found", 404
 
-@app.route("/wallet")
-def wallet_page():
-    try:
-        return open("wallet.html").read()
-    except:
-        return "wallet.html not found", 404
-
 if __name__ == "__main__":
     print("=== DYNAX V20 SECURE NODE STARTED ===")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
