@@ -393,6 +393,13 @@ def dex():
 
 
 def auto_connect_bootstrap():
+    # Static peers
+    static_peers = [
+        "https://dynax-node.onrender.com",
+    ]
+    for p in static_peers:
+        node.peers.add(p)
+
     import time
     time.sleep(10)
     bootstrap = os.environ.get("BOOTSTRAP_NODE", "")
