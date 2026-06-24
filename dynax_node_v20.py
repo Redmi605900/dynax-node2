@@ -415,6 +415,71 @@ def auto_connect_bootstrap():
 import threading
 threading.Thread(target=auto_connect_bootstrap, daemon=True).start()
 
+
+# DEX Liquidity Pool
+import json as _json
+
+POOL_FILE = "liquidity_pool.json"
+
+def load_pool():
+    if os.path.exists(POOL_FILE):
+        with open(POOL_FILE) as f:
+            return _json.load(f)
+    return {"DYX": 100000, "USDT": 50000}
+
+def save_pool(pool):
+    with open(POOL_FILE, "w") as f:
+        _json.dump(pool, f)
+
+liquidity_pool = load_pool()
+
+@app.route("/dex/pool")
+def dex_pool():
+    price = liquidity_pool["USDT"] / liquidity_pool["DYX"]
+    return jsonify({
+        "DYX": liquidity_pool["DYX"],
+        "USDT": liquidity_pool["USDT"],
+        "price_dyx_usdt": round(price, 6)
+    })
+
+@app.route("/dex/swap", methods=["POST"])
+def dex_swap():
+    try:
+        data = request.get_json()
+        token_in = data["token_in"]
+        token_out = data["token_out"]
+        amount_in = float(data["amount_in"])
+        if amount_in <= 0:
+            return jsonify({"error": "Amount must be positive"}), 400
+        reserve_in = liquidity_pool[token_in]
+        reserve_out = liquidity_pool[token_out]
+        amount_out = (amount_in * reserve_out) / (reserve_in + amount_in)
+        liquidity_pool[token_in] += amount_in
+        liquidity_pool[token_out] -= amount_out
+        save_pool(liquidity_pool)
+        return jsonify({
+            "success": True,
+            "swapped": f"{amount_in} {token_in} -> {round(amount_out,6)} {token_out}",
+            "rate": round(amount_out/amount_in, 6),
+            "pool": liquidity_pool
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/dex/liquidity", methods=["POST"])
+def dex_add_liquidity():
+    try:
+        data = request.get_json()
+        token = data["token"]
+        amount = float(data["amount"])
+        if amount <= 0:
+            return jsonify({"error": "Amount must be positive"}), 400
+        liquidity_pool[token] = liquidity_pool.get(token, 0) + amount
+        save_pool(liquidity_pool)
+        return jsonify({"success": True, "pool": liquidity_pool})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 if __name__ == "__main__":
     print("=== DYNAX V20 SECURE NODE STARTED ===")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
