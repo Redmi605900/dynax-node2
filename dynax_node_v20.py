@@ -391,6 +391,23 @@ def dex():
     except:
         return "dex.html not found", 404
 
+
+def auto_connect_bootstrap():
+    import time
+    time.sleep(10)
+    bootstrap = os.environ.get("BOOTSTRAP_NODE", "")
+    if bootstrap:
+        try:
+            import requests
+            requests.post(f"{bootstrap}/peers/add", json={"peer": os.environ.get("MY_URL", "")}, timeout=5)
+            node.peers.add(bootstrap)
+            print(f"Connected to bootstrap: {bootstrap}")
+        except Exception as e:
+            print(f"Bootstrap connect failed: {e}")
+
+import threading
+threading.Thread(target=auto_connect_bootstrap, daemon=True).start()
+
 if __name__ == "__main__":
     print("=== DYNAX V20 SECURE NODE STARTED ===")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
