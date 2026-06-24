@@ -307,7 +307,7 @@ def stats():
     return jsonify({
         "blocks": len(chain),
         "transactions": txs,
-        "nodes": 1,
+        "nodes": len(node.peers) + 1,
         "difficulty": "0000",
         "symbol": "DYX",
         "reward": 50,
