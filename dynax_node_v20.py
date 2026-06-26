@@ -482,8 +482,7 @@ def dex_add_liquidity():
 
 if __name__ == "__main__":
     print("=== DYNAX V20 SECURE NODE STARTED ===")
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
-
+    
 # ===== BRIDGE API v1 =====
 @app.route("/api/v1/info")
 def api_info():
@@ -515,10 +514,7 @@ def api_tx(txid):
 @app.route("/api/v1/blocks")
 def api_blocks():
     limit = int(request.args.get("limit", 10))
-    return jsonify({
-        "total": len(node.chain),
-        "blocks": node.chain[-limit:]
-    })
+    return jsonify({"total": len(node.chain), "blocks": node.chain[-limit:]})
 
 @app.route("/api/v1/send", methods=["POST"])
 def api_send():
@@ -534,5 +530,8 @@ def api_peers_add():
     peer = data.get("peer")
     if peer:
         node.peers.add(peer)
-        return jsonify({"success": True, "peer": peer, "total_peers": len(node.peers)})
+        return jsonify({"success": True, "peer": peer})
     return jsonify({"error": "peer required"}), 400
+
+app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
+
