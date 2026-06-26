@@ -483,3 +483,56 @@ def dex_add_liquidity():
 if __name__ == "__main__":
     print("=== DYNAX V20 SECURE NODE STARTED ===")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
+
+# ===== BRIDGE API v1 =====
+@app.route("/api/v1/info")
+def api_info():
+    return jsonify({
+        "network": "DYNAX",
+        "version": "v20",
+        "network_id": 1337,
+        "ticker": "DYX",
+        "max_supply": 11000000,
+        "block_reward": 50,
+        "algorithm": "SHA3-256 PoW",
+        "blocks": len(node.chain),
+        "status": "online"
+    })
+
+@app.route("/api/v1/balance/<addr>")
+def api_balance(addr):
+    bal = node.get_balance(addr)
+    return jsonify({"address": addr, "balance": bal, "symbol": "DYX"})
+
+@app.route("/api/v1/tx/<txid>")
+def api_tx(txid):
+    for block in node.chain:
+        for tx in block.get("transactions", []):
+            if tx.get("signature", "")[:16] == txid[:16]:
+                return jsonify({"found": True, "tx": tx, "block": block["index"]})
+    return jsonify({"found": False, "txid": txid}), 404
+
+@app.route("/api/v1/blocks")
+def api_blocks():
+    limit = int(request.args.get("limit", 10))
+    return jsonify({
+        "total": len(node.chain),
+        "blocks": node.chain[-limit:]
+    })
+
+@app.route("/api/v1/send", methods=["POST"])
+def api_send():
+    return proxy_tx_send()
+
+@app.route("/api/v1/peers", methods=["GET"])
+def api_peers():
+    return jsonify({"peers": list(node.peers), "count": len(node.peers)})
+
+@app.route("/api/v1/peers/add", methods=["POST"])
+def api_peers_add():
+    data = request.json
+    peer = data.get("peer")
+    if peer:
+        node.peers.add(peer)
+        return jsonify({"success": True, "peer": peer, "total_peers": len(node.peers)})
+    return jsonify({"error": "peer required"}), 400
