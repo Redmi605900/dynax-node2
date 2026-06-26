@@ -522,7 +522,7 @@ def api_blocks():
 
 @app.route("/api/v1/send", methods=["POST"])
 def api_send():
-    return proxy_tx_send()
+    return send_tx_with_key()
 
 @app.route("/api/v1/peers", methods=["GET"])
 def api_peers():
