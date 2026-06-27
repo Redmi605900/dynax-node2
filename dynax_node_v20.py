@@ -89,6 +89,7 @@ class DynaxNode:
 
     def mine(self, miner):
         reward = {"from": "SYSTEM", "to": miner, "amount": 50, "timestamp": int(time.time())}
+        clean_mempool()
         txs = self.mempool[:50]
         self.mempool = self.mempool[50:]
         prev_hash = self.chain[-1]["hash"] if self.chain else "0"*64
@@ -576,9 +577,8 @@ def receive_tx():
     if not tx:
         return jsonify({"error": "no tx"}), 400
     # เช็คว่ามีใน mempool แล้วหรือยัง
-    for existing in node.mempool:
-        if existing.get("signature") == tx.get("signature"):
-            return jsonify({"status": "already have tx"})
+    if is_duplicate_tx(tx):
+        return jsonify({"status": "already have tx"})
     node.mempool.append(tx)
     # relay ต่อไปยัง peer อื่น
     threading.Thread(target=broadcast_tx, args=(tx,), daemon=True).start()
@@ -616,6 +616,37 @@ def get_difficulty(chain):
         new_zeros = current_zeros
     
     return "0" * new_zeros
+
+
+def clean_mempool():
+    """ลบ tx ซ้ำและจัดลำดับตาม fee"""
+    seen = set()
+    unique = []
+    for tx in node.mempool:
+        sig = tx.get("signature", str(tx.get("timestamp","")))
+        if sig not in seen:
+            seen.add(sig)
+            unique.append(tx)
+    # เรียงตาม fee มากไปน้อย
+    unique.sort(key=lambda x: float(x.get("fee", 0)), reverse=True)
+    # จำกัด 1000 tx
+    node.mempool = unique[:1000]
+
+def is_duplicate_tx(tx):
+    """ตรวจว่า tx อยู่ใน mempool หรือ chain แล้วไหม"""
+    sig = tx.get("signature")
+    if not sig:
+        return False
+    # เช็ค mempool
+    for m in node.mempool:
+        if m.get("signature") == sig:
+            return True
+    # เช็ค chain
+    for block in node.chain:
+        for t in block.get("transactions", []):
+            if t.get("signature") == sig:
+                return True
+    return False
 
 def validate_chain(chain):
     """ตรวจสอบ chain ว่าถูกต้องไหม"""
