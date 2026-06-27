@@ -424,14 +424,24 @@ import json as _json
 POOL_FILE = "liquidity_pool.json"
 
 def load_pool():
-    if os.path.exists(POOL_FILE):
-        with open(POOL_FILE) as f:
-            return _json.load(f)
-    return {"DYX": 100000, "USDT": 50000}
+    """คำนวณ pool state จาก chain"""
+    pool = {"DYX": 100000, "USDT": 50000}
+    for block in node.chain:
+        for tx in block.get("transactions", []):
+            if tx.get("type") == "dex_swap":
+                pool[tx["token_in"]] = pool.get(tx["token_in"], 0) + tx["amount_in"]
+                pool[tx["token_out"]] = pool.get(tx["token_out"], 0) - tx["amount_out"]
+            elif tx.get("type") == "dex_liquidity":
+                pool[tx["token"]] = pool.get(tx["token"], 0) + tx["amount"]
+    return pool
 
 def save_pool(pool):
     with open(POOL_FILE, "w") as f:
         _json.dump(pool, f)
+
+def get_pool():
+    """ดึง pool state ล่าสุดจาก chain"""
+    return load_pool()
 
 liquidity_pool = load_pool()
 
@@ -476,8 +486,20 @@ def dex_add_liquidity():
         amount = float(data["amount"])
         if amount <= 0:
             return jsonify({"error": "Amount must be positive"}), 400
-        liquidity_pool[token] = liquidity_pool.get(token, 0) + amount
-        save_pool(liquidity_pool)
+        pool = get_pool()
+        pool[token] = pool.get(token, 0) + amount
+        
+        liq_tx = {
+            "type": "dex_liquidity",
+            "token": token,
+            "amount": amount,
+            "timestamp": int(__import__("time").time()),
+            "from": "DEX",
+            "to": "DEX"
+        }
+        node.mempool.append(liq_tx)
+        save_pool(pool)
+        liquidity_pool.update(pool)
         return jsonify({"success": True, "pool": liquidity_pool})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
