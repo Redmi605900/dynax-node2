@@ -659,6 +659,97 @@ def auto_sync_loop():
         time.sleep(30)
 
 threading.Thread(target=auto_sync_loop, daemon=True).start()
+PEERS_FILE = "peers.json"
+MAX_PEERS = 100
+MAX_NEW_PEERS_PER_ROUND = 10
+MAX_FAILURES = 5
+peer_lock = threading.Lock()
+peer_failures = {}
+
+def save_peers():
+    try:
+        import json as _j
+        with peer_lock:
+            _j.dump(list(node.peers), open(PEERS_FILE, "w"))
+    except: pass
+
+def load_peers():
+    try:
+        import json as _j
+        peers = _j.load(open(PEERS_FILE))
+        for p in peers:
+            node.peers.add(p)
+        print(f"Loaded {len(peers)} peers")
+    except: pass
+
+def is_valid_peer(url):
+    if not url: return False
+    if not (url.startswith("http://") or url.startswith("https://")): return False
+    if len(url) > 200: return False
+    return True
+
+def verify_peer(url):
+    import requests as _req
+    try:
+        r = _req.get(f"{url}/api/v1/info", timeout=5)
+        data = r.json()
+        return (data.get("network_id") == 1337 and data.get("network") == "DYNAX")
+    except: return False
+
+def remove_dead_peers():
+    import requests as _req
+    to_remove = []
+    with peer_lock:
+        peers_copy = list(node.peers)
+    for peer in peers_copy:
+        try:
+            _req.get(f"{peer}/stats", timeout=3)
+            peer_failures[peer] = 0
+        except:
+            peer_failures[peer] = peer_failures.get(peer, 0) + 1
+            if peer_failures[peer] >= MAX_FAILURES:
+                to_remove.append(peer)
+    for peer in to_remove:
+        with peer_lock:
+            node.peers.discard(peer)
+        print(f"Removed dead peer: {peer}")
+
+def peer_discovery_loop():
+    import time
+    import requests as _req
+    load_peers()
+    time.sleep(20)
+    my_url = os.environ.get("MY_URL", "")
+    while True:
+        try:
+            new_peers = set()
+            with peer_lock:
+                peers_copy = list(node.peers)
+            for peer in peers_copy:
+                try:
+                    r = _req.get(f"{peer}/peers", timeout=5)
+                    data = r.json()
+                    for p in data.get("peers", []):
+                        if (p and p != my_url and p not in node.peers
+                                and is_valid_peer(p) and len(node.peers) < MAX_PEERS):
+                            new_peers.add(p)
+                except: pass
+            added = 0
+            for p in list(new_peers)[:MAX_NEW_PEERS_PER_ROUND]:
+                if verify_peer(p):
+                    with peer_lock:
+                        node.peers.add(p)
+                    added += 1
+                    print(f"Discovered: {p}")
+            remove_dead_peers()
+            save_peers()
+        except Exception as e:
+            print(f"Peer discovery error: {e}")
+        time.sleep(60)
+
+threading.Thread(target=peer_discovery_loop, daemon=True).start()
+print("Peer discovery started")
+
 print("Auto-sync thread started")
 
 app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
