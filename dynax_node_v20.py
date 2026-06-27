@@ -355,9 +355,7 @@ def sync_chain():
                 longest = peer_chain
         except:
             pass
-    if len(longest) > len(node.chain):
-        node.chain = longest
-        node.save_chain()
+    if reorg_chain(longest):
         return jsonify({"status": "synced", "blocks": len(node.chain)})
     return jsonify({"status": "already longest", "blocks": len(node.chain)})
 
@@ -639,6 +637,39 @@ def check_replay(tx):
                 return True
     return False
 
+
+def calc_cumulative_work(chain):
+    """คำนวณ cumulative work ของ chain"""
+    total = 0
+    for block in chain:
+        h = block.get("hash", "")
+        zeros = len(h) - len(h.lstrip("0"))
+        total += 16 ** zeros
+    return total
+
+def reorg_chain(new_chain):
+    """เปลี่ยน chain ถ้า new_chain มี cumulative work มากกว่า"""
+    if not validate_chain(new_chain):
+        return False
+    new_work = calc_cumulative_work(new_chain)
+    cur_work = calc_cumulative_work(node.chain)
+    if new_work > cur_work:
+        print(f"Reorg: {len(node.chain)} -> {len(new_chain)} blocks")
+        node.chain = new_chain
+        node.save_chain()
+        # คืน tx ที่ถูก orphan กลับ mempool
+        confirmed = set()
+        for block in new_chain:
+            for tx in block.get("transactions", []):
+                confirmed.add(tx.get("signature",""))
+        for block in node.chain:
+            for tx in block.get("transactions", []):
+                sig = tx.get("signature","")
+                if sig and sig not in confirmed:
+                    node.mempool.append(tx)
+        return True
+    return False
+
 def clean_mempool():
     """ลบ tx ซ้ำและจัดลำดับตาม fee"""
     seen = set()
@@ -724,10 +755,8 @@ def auto_sync_loop():
                             print(f"Found higher work chain from {peer}: {len(peer_chain)} blocks")
                 except:
                     pass
-            if len(longest) > len(node.chain):
-                node.chain = longest
-                node.save_chain()
-                print(f"Auto-synced to {len(node.chain)} blocks")
+            if reorg_chain(longest):
+                print(f"Auto-synced/reorged to {len(node.chain)} blocks")
         except Exception as e:
             print(f"Auto-sync error: {e}")
         time.sleep(30)
