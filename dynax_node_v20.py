@@ -601,9 +601,12 @@ def auto_sync_loop():
                 try:
                     r = _req.get(f"{peer}/chain", timeout=5)
                     peer_chain = r.json()
-                    if len(peer_chain) > len(longest) and validate_chain(peer_chain):
-                        longest = peer_chain
-                        print(f"Found longer chain from {peer}: {len(peer_chain)} blocks")
+                    if validate_chain(peer_chain):
+                        peer_work = sum(16 ** (64 - len(b.get("hash","").lstrip("0"))) for b in peer_chain)
+                        cur_work = sum(16 ** (64 - len(b.get("hash","").lstrip("0"))) for b in longest)
+                        if peer_work > cur_work:
+                            longest = peer_chain
+                            print(f"Found higher work chain from {peer}: {len(peer_chain)} blocks")
                 except:
                     pass
             if len(longest) > len(node.chain):
