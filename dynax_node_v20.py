@@ -618,6 +618,27 @@ def get_difficulty(chain):
     return "0" * new_zeros
 
 
+
+def get_nonce(addr):
+    """นับจำนวน tx ที่ส่งจาก address นี้"""
+    count = 0
+    for block in node.chain:
+        for tx in block.get("transactions", []):
+            if tx.get("from") == addr:
+                count += 1
+    return count
+
+def check_replay(tx):
+    """ตรวจสอบ replay attack - tx เดิมส่งซ้ำ"""
+    sig = tx.get("signature")
+    if not sig:
+        return False
+    for block in node.chain:
+        for t in block.get("transactions", []):
+            if t.get("signature") == sig:
+                return True
+    return False
+
 def clean_mempool():
     """ลบ tx ซ้ำและจัดลำดับตาม fee"""
     seen = set()
