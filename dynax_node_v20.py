@@ -535,6 +535,31 @@ def api_peers_add():
 
 
 
+
+def broadcast_tx(tx):
+    """ส่ง transaction ไปให้ทุก peer"""
+    import requests as _req
+    for peer in list(node.peers):
+        try:
+            _req.post(f"{peer}/receive_tx", json=tx, timeout=3)
+        except:
+            pass
+
+@app.route("/receive_tx", methods=["POST"])
+def receive_tx():
+    """รับ transaction จาก peer"""
+    tx = request.json
+    if not tx:
+        return jsonify({"error": "no tx"}), 400
+    # เช็คว่ามีใน mempool แล้วหรือยัง
+    for existing in node.mempool:
+        if existing.get("signature") == tx.get("signature"):
+            return jsonify({"status": "already have tx"})
+    node.mempool.append(tx)
+    # relay ต่อไปยัง peer อื่น
+    threading.Thread(target=broadcast_tx, args=(tx,), daemon=True).start()
+    return jsonify({"status": "received", "mempool_size": len(node.mempool)})
+
 def validate_chain(chain):
     """ตรวจสอบ chain ว่าถูกต้องไหม"""
     import hashlib as _hl
