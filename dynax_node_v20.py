@@ -533,5 +533,33 @@ def api_peers_add():
         return jsonify({"success": True, "peer": peer})
     return jsonify({"error": "peer required"}), 400
 
+
+def auto_sync_loop():
+    import time
+    import requests as _req
+    time.sleep(15)  # รอให้ node start ก่อน
+    while True:
+        try:
+            longest = node.chain
+            for peer in list(node.peers):
+                try:
+                    r = _req.get(f"{peer}/chain", timeout=5)
+                    peer_chain = r.json()
+                    if len(peer_chain) > len(longest):
+                        longest = peer_chain
+                        print(f"Found longer chain from {peer}: {len(peer_chain)} blocks")
+                except:
+                    pass
+            if len(longest) > len(node.chain):
+                node.chain = longest
+                node.save_chain()
+                print(f"Auto-synced to {len(node.chain)} blocks")
+        except Exception as e:
+            print(f"Auto-sync error: {e}")
+        time.sleep(30)
+
+threading.Thread(target=auto_sync_loop, daemon=True).start()
+print("Auto-sync thread started")
+
 app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
 
