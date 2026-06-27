@@ -534,6 +534,37 @@ def api_peers_add():
     return jsonify({"error": "peer required"}), 400
 
 
+
+def validate_chain(chain):
+    """ตรวจสอบ chain ว่าถูกต้องไหม"""
+    import hashlib as _hl
+    for i in range(1, len(chain)):
+        block = chain[i]
+        prev = chain[i-1]
+        
+        # เช็ค previous hash
+        if block.get("prev_hash") != prev.get("hash"):
+            print(f"Invalid prev_hash at block {i}")
+            return False
+        
+        # เช็ค hash ของ block
+        raw = _hl.sha3_256(
+            __import__("json").dumps(
+                {k: v for k, v in block.items() if k != "hash"}, 
+                sort_keys=True
+            ).encode()
+        ).hexdigest()
+        if raw != block.get("hash"):
+            print(f"Invalid hash at block {i}")
+            return False
+        
+        # เช็ค PoW (hash ต้องขึ้นต้นด้วย 0000)
+        if not block.get("hash", "").startswith("0000"):
+            print(f"Invalid PoW at block {i}")
+            return False
+    
+    return True
+
 def auto_sync_loop():
     import time
     import requests as _req
@@ -545,7 +576,7 @@ def auto_sync_loop():
                 try:
                     r = _req.get(f"{peer}/chain", timeout=5)
                     peer_chain = r.json()
-                    if len(peer_chain) > len(longest):
+                    if len(peer_chain) > len(longest) and validate_chain(peer_chain):
                         longest = peer_chain
                         print(f"Found longer chain from {peer}: {len(peer_chain)} blocks")
                 except:
