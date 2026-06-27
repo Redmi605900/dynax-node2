@@ -32,8 +32,19 @@ class DynaxNode:
         self.chain = []
         self.mempool = []
         self.peers = set()
+        self._load_initial_peers()
         self.CHAIN_FILE = "dynax_chain.json"
         self.load_chain()
+
+    def _load_initial_peers(self):
+        try:
+            import json as _j
+            peers = _j.load(open("peers.json"))
+            for p in peers:
+                self.peers.add(p)
+            print(f"Loaded {len(peers)} peers from peers.json")
+        except:
+            pass
 
     def load_chain(self):
         if os.path.exists(self.CHAIN_FILE):
