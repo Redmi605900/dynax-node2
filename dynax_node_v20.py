@@ -319,6 +319,23 @@ def show_pending():
     })
 
 
+
+@app.route("/snapshot")
+def snapshot():
+    chainwork = 0
+    for b in node.chain:
+        h = b.get("hash","")
+        zeros = len(h) - len(h.lstrip("0"))
+        chainwork += 16 ** zeros
+
+    return jsonify({
+        "height": len(node.chain),
+        "chainwork": chainwork,
+        "blocks": node.chain,
+        "peers": list(node.peers)
+    })
+
+
 @app.route("/stats")
 def stats():
     chain = node.chain
@@ -928,5 +945,114 @@ print("Peer discovery started")
 
 print("Auto-sync thread started")
 
+
+import hashlib as _hl
+import json as _json
+
+def get_chain_hash(chain):
+    """คำนวณ hash ของ chain ทั้งหมดสำหรับ verify"""
+    data = _json.dumps([b.get("hash","") for b in chain], separators=(",",":"))
+    return _hl.sha3_256(data.encode()).hexdigest()
+
+@app.route("/snapshot")
+def get_snapshot():
+    """ส่ง chain snapshot สำหรับ node ใหม่"""
+    chain = node.chain
+    return _json.dumps({
+        "height": len(chain),
+        "chain_hash": get_chain_hash(chain),
+        "chain": chain,
+        "network_id": 1337,
+        "symbol": "DYX"
+    }), 200, {"Content-Type": "application/json"}
+
+@app.route("/snapshot/info")
+def snapshot_info():
+    """ข้อมูล snapshot โดยไม่ต้อง download chain"""
+    return jsonify({
+        "height": len(node.chain),
+        "chain_hash": get_chain_hash(node.chain),
+        "network_id": 1337,
+        "peers": list(node.peers)
+    })
+
+def sync_from_snapshot(peer_url):
+    """โหลด chain จาก snapshot ของ peer"""
+    import requests as _req
+    try:
+        print(f"Downloading snapshot from {peer_url}...")
+        r = _req.get(f"{peer_url}/snapshot", timeout=60)
+        data = r.json()
+        
+        # ตรวจสอบ network_id
+        if data.get("network_id") != 1337:
+            print("Wrong network_id!")
+            return False
+            
+        chain = data.get("chain", [])
+        chain_hash = data.get("chain_hash")
+        
+        # verify chain hash
+        if get_chain_hash(chain) != chain_hash:
+            print("Chain hash mismatch!")
+            return False
+            
+        # validate chain
+        if not validate_chain(chain):
+            print("Invalid chain!")
+            return False
+            
+        # เปรียบเทียบ cumulative work
+        if calc_cumulative_work(chain) > calc_cumulative_work(node.chain):
+            node.chain = chain
+            node.save_chain()
+            print(f"Snapshot synced! Height: {len(chain)}")
+            return True
+        else:
+            print("Current chain has more work")
+            return False
+    except Exception as e:
+        print(f"Snapshot sync error: {e}")
+        return False
+
+def initial_snapshot_sync():
+    """sync chain จาก snapshot ตอน node เริ่มต้น"""
+    import time
+    time.sleep(5)
+    static_peers = [
+        "https://web-production-8bbb8.up.railway.app",
+        "https://dynax-node2.onrender.com",
+        "https://dynax-node.onrender.com"
+    ]
+    for peer in static_peers:
+        try:
+            r = __import__("requests").get(f"{peer}/snapshot/info", timeout=5)
+            info = r.json()
+            if info.get("height", 0) > len(node.chain):
+                if sync_from_snapshot(peer):
+                    print(f"Initial sync from {peer} complete!")
+                    break
+        except:
+            pass
+
+threading.Thread(target=initial_snapshot_sync, daemon=True).start()
+print("Snapshot sync initialized")
+
 app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
+
+
+
+def download_snapshot(peer):
+    try:
+        r = requests.get(f"{peer}/snapshot", timeout=20)
+        data = r.json()
+
+        if data["height"] > len(node.chain):
+            node.chain = data["blocks"]
+            node.peers.update(data.get("peers", []))
+            node.save_chain()
+            print(f"Snapshot synced: {len(node.chain)} blocks")
+
+    except Exception as e:
+        print("Snapshot sync failed:", e)
 
