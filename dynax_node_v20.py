@@ -1144,6 +1144,68 @@ def state_balance(addr):
     })
 
 
+
+import hmac as _hmac
+import hashlib as _hl2
+import time as _time2
+
+P2P_SECRET = os.environ.get("P2P_SECRET", "dynax_network_1337")
+
+def sign_p2p_message(data):
+    """สร้าง signature สำหรับ P2P message"""
+    timestamp = int(_time2.time())
+    payload = f"{timestamp}:{data}"
+    sig = _hmac.new(
+        P2P_SECRET.encode(),
+        payload.encode(),
+        _hl2.sha256
+    ).hexdigest()
+    return {"timestamp": timestamp, "signature": sig}
+
+def verify_p2p_message(timestamp, signature, data):
+    """ตรวจสอบ P2P message"""
+    # ตรวจ timestamp ไม่เกิน 60 วินาที
+    if abs(int(_time2.time()) - int(timestamp)) > 60:
+        return False
+    payload = f"{timestamp}:{data}"
+    expected = _hmac.new(
+        P2P_SECRET.encode(),
+        payload.encode(),
+        _hl2.sha256
+    ).hexdigest()
+    return _hmac.compare_digest(signature, expected)
+
+@app.route("/p2p/verify", methods=["POST"])
+def p2p_verify():
+    """ตรวจสอบว่า node นี้เป็น DYNAX node จริง"""
+    data = request.json
+    timestamp = data.get("timestamp")
+    signature = data.get("signature")
+    challenge = data.get("challenge", "")
+    
+    if verify_p2p_message(timestamp, signature, challenge):
+        return jsonify({
+            "verified": True,
+            "network_id": 1337,
+            "node": "DYNAX v20"
+        })
+    return jsonify({"verified": False}), 401
+
+def broadcast_block_signed(block):
+    """ส่ง block พร้อม P2P signature"""
+    import requests as _req
+    block_data = __import__("json").dumps(block, sort_keys=True)
+    auth = sign_p2p_message(block_data[:64])
+    
+    for peer in list(node.peers):
+        try:
+            _req.post(f"{peer}/receive_block", 
+                json={**block, "_p2p_ts": auth["timestamp"], "_p2p_sig": auth["signature"]},
+                timeout=5)
+        except:
+            pass
+
+
 app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
 
 
