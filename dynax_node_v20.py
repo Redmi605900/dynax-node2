@@ -352,6 +352,10 @@ def receive_block():
     if not block:
         return jsonify({"error": "no block"}), 400
     # เช็ก index ไม่ซ้ำ
+    # ตรวจ signature ทุก tx ใน block
+    for tx in block.get("transactions", []):
+        if not verify_tx_signature(tx):
+            return jsonify({"error": "invalid tx signature"}), 400
     if any(b["index"] == block["index"] for b in node.chain):
         return jsonify({"status": "already have"}), 200
     # เช็ก prev_hash ต่อกัน
@@ -687,6 +691,46 @@ def reorg_chain(new_chain):
         return True
     return False
 
+
+
+def verify_tx_signature(tx):
+    """ตรวจสอบ signature ของ transaction"""
+    try:
+        from ecdsa import VerifyingKey, SECP256k1, BadSignatureError
+        import hashlib as _hl
+        
+        sender = tx.get("from")
+        if sender in ("SYSTEM", "GENESIS", "DEX"):
+            return True
+            
+        signature = tx.get("signature")
+        if not signature:
+            return False
+            
+        # หา public key จาก chain
+        pub_hex = None
+        for block in node.chain:
+            for t in block.get("transactions", []):
+                if t.get("from") == sender and t.get("public_key"):
+                    pub_hex = t["public_key"]
+                    break
+                    
+        if not pub_hex:
+            return True  # ยังไม่มี tx เก่า ผ่านไปก่อน
+            
+        msg = _hl.sha3_256(
+            __import__("json").dumps(
+                {"amount": tx["amount"], "fee": tx.get("fee",0), 
+                 "from": tx["from"], "to": tx["to"]}, 
+                sort_keys=True, separators=(",",":")
+            ).encode()
+        ).digest()
+        
+        vk = VerifyingKey.from_string(bytes.fromhex(pub_hex), curve=SECP256k1)
+        vk.verify(bytes.fromhex(signature), msg)
+        return True
+    except:
+        return False
 
 def calc_total_fees(txs):
     """คำนวณ fee รวมจาก transactions"""
