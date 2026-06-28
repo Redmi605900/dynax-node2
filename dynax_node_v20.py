@@ -99,7 +99,10 @@ class DynaxNode:
         return {"status": "queued", "tx": tx}
 
     def mine(self, miner):
-        reward = {"from": "SYSTEM", "to": miner, "amount": 50, "timestamp": int(time.time())}
+        clean_mempool()
+        txs_pending = self.mempool[:50]
+        total_fees = calc_total_fees(txs_pending)
+        reward = {"from": "SYSTEM", "to": miner, "amount": 50 + total_fees, "fee": 0, "timestamp": int(time.time())}
         clean_mempool()
         txs = self.mempool[:50]
         self.mempool = self.mempool[50:]
@@ -268,7 +271,10 @@ def send_tx_with_key():
     from_addr = data.get('from')
     to_addr = data.get('to')
     amount = data.get('amount')
-    fee = data.get('fee', 0.01)
+    fee = float(data.get('fee', 0.01))
+    min_fee = get_min_fee()
+    if fee < min_fee:
+        return jsonify({"error": f"Fee too low. Minimum: {min_fee} DYX"}), 400
     private_key_hex = data.get('private_key')
     
     if not all([from_addr, to_addr, amount, private_key_hex]):
@@ -680,6 +686,18 @@ def reorg_chain(new_chain):
                     node.mempool.append(tx)
         return True
     return False
+
+
+def calc_total_fees(txs):
+    """คำนวณ fee รวมจาก transactions"""
+    return sum(float(tx.get("fee", 0)) for tx in txs if tx.get("from") != "SYSTEM")
+
+def get_min_fee():
+    """คำนวณ minimum fee จาก mempool"""
+    if len(node.mempool) < 100:
+        return 0.01  # mempool ยังว่าง fee ขั้นต่ำปกติ
+    fees = sorted([float(tx.get("fee", 0)) for tx in node.mempool])
+    return fees[len(fees)//2]  # median fee
 
 def clean_mempool():
     """ลบ tx ซ้ำและจัดลำดับตาม fee"""
