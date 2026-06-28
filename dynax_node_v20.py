@@ -1038,6 +1038,40 @@ def initial_snapshot_sync():
 threading.Thread(target=initial_snapshot_sync, daemon=True).start()
 print("Snapshot sync initialized")
 
+
+def sync_mempool_from_peers():
+    """ดึง mempool จากทุก peer"""
+    import requests as _req
+    for peer in list(node.peers):
+        try:
+            r = _req.get(f"{peer}/pending", timeout=5)
+            data = r.json()
+            txs = data.get("transactions", [])
+            added = 0
+            for tx in txs:
+                if not is_duplicate_tx(tx) and not check_replay(tx):
+                    node.mempool.append(tx)
+                    added += 1
+            if added > 0:
+                print(f"Mempool sync: +{added} tx from {peer}")
+        except:
+            pass
+    clean_mempool()
+
+def mempool_sync_loop():
+    """sync mempool ทุก 15 วินาที"""
+    import time
+    time.sleep(25)
+    while True:
+        try:
+            sync_mempool_from_peers()
+        except Exception as e:
+            print(f"Mempool sync error: {e}")
+        time.sleep(15)
+
+threading.Thread(target=mempool_sync_loop, daemon=True).start()
+print("Mempool sync started")
+
 app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
 
 
