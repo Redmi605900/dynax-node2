@@ -1072,6 +1072,78 @@ def mempool_sync_loop():
 threading.Thread(target=mempool_sync_loop, daemon=True).start()
 print("Mempool sync started")
 
+
+def reconstruct_state():
+    """คำนวณ state ทั้งหมดจาก chain ล้วนๆ"""
+    state = {
+        "balances": {},
+        "dex_pool": {"DYX": 100000, "USDT": 50000},
+        "total_supply": 0,
+        "tx_count": 0,
+        "nonces": {}
+    }
+    
+    for block in node.chain:
+        for tx in block.get("transactions", []):
+            sender = tx.get("from", "")
+            receiver = tx.get("to", "")
+            amount = float(tx.get("amount", 0))
+            fee = float(tx.get("fee", 0))
+            tx_type = tx.get("type", "transfer")
+            
+            if tx_type == "dex_swap":
+                token_in = tx.get("token_in")
+                token_out = tx.get("token_out")
+                amt_in = float(tx.get("amount_in", 0))
+                amt_out = float(tx.get("amount_out", 0))
+                if token_in and token_out:
+                    state["dex_pool"][token_in] = state["dex_pool"].get(token_in, 0) + amt_in
+                    state["dex_pool"][token_out] = state["dex_pool"].get(token_out, 0) - amt_out
+                    
+            elif tx_type == "dex_liquidity":
+                token = tx.get("token")
+                amt = float(tx.get("amount", 0))
+                if token:
+                    state["dex_pool"][token] = state["dex_pool"].get(token, 0) + amt
+                    
+            else:
+                # transfer ปกติ
+                if sender == "SYSTEM" or sender == "GENESIS":
+                    state["balances"][receiver] = state["balances"].get(receiver, 0) + amount
+                    state["total_supply"] += amount
+                elif sender:
+                    state["balances"][sender] = state["balances"].get(sender, 0) - amount - fee
+                    state["balances"][receiver] = state["balances"].get(receiver, 0) + amount
+                    state["nonces"][sender] = state["nonces"].get(sender, 0) + 1
+                    
+            state["tx_count"] += 1
+    
+    return state
+
+@app.route("/state")
+def get_state():
+    """ดึง state ปัจจุบันที่ derive จาก chain"""
+    state = reconstruct_state()
+    return jsonify({
+        "total_supply": state["total_supply"],
+        "tx_count": state["tx_count"],
+        "dex_pool": state["dex_pool"],
+        "block_height": len(node.chain),
+        "status": "reconstructed_from_chain"
+    })
+
+@app.route("/state/balance/<addr>")
+def state_balance(addr):
+    """ดึง balance จาก state reconstruction"""
+    state = reconstruct_state()
+    return jsonify({
+        "address": addr,
+        "balance": state["balances"].get(addr, 0),
+        "nonce": state["nonces"].get(addr, 0),
+        "source": "chain_reconstruction"
+    })
+
+
 app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
 
 
