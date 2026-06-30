@@ -3,6 +3,7 @@ import requests
 import threading
 import json
 import hashlib
+
 import os
 from flask import Flask, jsonify, request
 from ecdsa import VerifyingKey, SECP256k1
@@ -540,6 +541,48 @@ def dex_add_liquidity():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+
+# ===== DVM (Smart Contract) Routes =====
+@app.route("/dvm/contracts", methods=["GET"])
+def list_contracts():
+    return jsonify(dvm.list_contracts())
+
+@app.route("/dvm/deploy", methods=["POST"])
+def deploy_contract():
+    data = request.json
+    owner = data.get("owner")
+    code = data.get("code")
+    nonce = data.get("nonce", 0)
+    
+    if not owner or not code:
+        return jsonify({"error": "Need owner and code"}), 400
+    
+    result = dvm.deploy_contract(owner, code, nonce)
+    dvm.save_contracts()
+    return jsonify(result)
+
+@app.route("/dvm/execute", methods=["POST"])
+def execute_contract():
+    data = request.json
+    address = data.get("address")
+    method = data.get("method")
+    args = data.get("args", [])
+    caller = data.get("caller")
+    
+    if not address or not method:
+        return jsonify({"error": "Need address and method"}), 400
+    
+    result = dvm.execute_contract(address, method, args, caller)
+    dvm.save_contracts()
+    return jsonify(result)
+
+@app.route("/dvm/contract/<address>", methods=["GET"])
+def get_contract(address):
+    contract = dvm.get_contract(address)
+    if contract:
+        return jsonify(contract)
+    return jsonify({"error": "Contract not found"}), 404
+
 if __name__ == "__main__":
     print("=== DYNAX V20 SECURE NODE STARTED ===")
     
@@ -945,6 +988,7 @@ print("Peer discovery started")
 print("Auto-sync thread started")
 
 
+import hashlib
 import hashlib as _hl
 import json as _json
 
@@ -1145,8 +1189,10 @@ def state_balance(addr):
 
 
 import hmac as _hmac
+import hashlib
 import hashlib as _hl2
 import time as _time2
+from dynax_dvm import dvm
 
 P2P_SECRET = os.environ.get("P2P_SECRET", "dynax_network_1337")
 
