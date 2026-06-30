@@ -320,7 +320,6 @@ def show_pending():
 
 
 
-@app.route("/snapshot")
 def snapshot():
     chainwork = 0
     for b in node.chain:
@@ -805,7 +804,7 @@ def validate_chain(chain):
         # เช็ค hash ของ block
         raw = _hl.sha3_256(
             __import__("json").dumps(
-                {k: v for k, v in block.items() if k != "hash"}, 
+                    {k: block[k] for k in ["index", "timestamp", "transactions", "prev_hash", "nonce"]},
                 sort_keys=True
             ).encode()
         ).hexdigest()
