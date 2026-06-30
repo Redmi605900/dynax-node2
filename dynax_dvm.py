@@ -6,6 +6,7 @@ import hashlib
 import json
 import time
 from typing import Dict, List, Optional
+from dynax_events import event_log
 
 
 class DVMContract:
@@ -118,6 +119,31 @@ class DVM:
         except FileNotFoundError:
             return False
 
+
+
+    def execute_contract_with_events(self, address, method, args=None, caller=None, block_number=0):
+        """Execute contract พร้อม emit events"""
+        result = self.execute_contract(address, method, args, caller)
+        
+        # Emit events ตาม method
+        if method == "set" and result.get("status") == "success":
+            key, value = args[0], args[1]
+            event_log.emit(
+                contract_address=address,
+                event_name="StorageChanged",
+                data={"key": key, "value": value, "caller": caller},
+                block_number=block_number
+            )
+        
+        elif method == "transfer" and result.get("status") == "transferred":
+            event_log.emit(
+                contract_address=address,
+                event_name="Transfer",
+                data={"to": args[0], "amount": args[1]},
+                block_number=block_number
+            )
+        
+        return result
 
 dvm = DVM()
 dvm.load_contracts()

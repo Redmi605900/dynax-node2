@@ -572,7 +572,11 @@ def execute_contract():
     if not address or not method:
         return jsonify({"error": "Need address and method"}), 400
     
-    result = dvm.execute_contract(address, method, args, caller)
+    # ใช้ execute_contract_with_events เพื่อบันทึก events
+    result = dvm.execute_contract_with_events(address, method, args, caller, block_number=len(node.chain))
+    
+    # บันทึก event logs
+    event_log.save_logs()
     dvm.save_contracts()
     return jsonify(result)
 
@@ -582,6 +586,37 @@ def get_contract(address):
     if contract:
         return jsonify(contract)
     return jsonify({"error": "Contract not found"}), 404
+
+
+# ===== Event Logs Routes =====
+@app.route("/events/logs", methods=["GET"])
+def get_event_logs():
+    contract = request.args.get("contract")
+    event = request.args.get("event")
+    from_block = int(request.args.get("from_block", 0))
+    to_block = request.args.get("to_block")
+    to_block = int(to_block) if to_block else None
+    
+    events = event_log.get_events(
+        contract_address=contract,
+        event_name=event,
+        from_block=from_block,
+        to_block=to_block
+    )
+    return jsonify(events)
+
+@app.route("/events/contract/<address>", methods=["GET"])
+def get_contract_events(address):
+    events = event_log.get_contract_events(address)
+    return jsonify(events)
+
+@app.route("/events/stats", methods=["GET"])
+def get_events_stats():
+    return jsonify({
+        "total_events": len(event_log.events),
+        "contracts_with_events": len(event_log.events_by_contract),
+        "recent_events": [e.to_dict() for e in event_log.events[-10:]]
+    })
 
 if __name__ == "__main__":
     print("=== DYNAX V20 SECURE NODE STARTED ===")
@@ -1193,6 +1228,7 @@ import hashlib
 import hashlib as _hl2
 import time as _time2
 from dynax_dvm import dvm
+from dynax_events import event_log
 
 P2P_SECRET = os.environ.get("P2P_SECRET", "dynax_network_1337")
 
