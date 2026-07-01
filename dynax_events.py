@@ -5,6 +5,8 @@ DYNAX Event System
 import json
 import time
 from typing import Dict, List
+import dynax_db as db
+import time
 
 
 class ContractEvent:
@@ -44,6 +46,7 @@ class EventLog:
         if contract_address not in self.events_by_contract:
             self.events_by_contract[contract_address] = []
         self.events_by_contract[contract_address].append(event)
+        db.save_event(contract_address, event_name, data, block_number, int(time.time()))
         return event
 
     def get_events(self, contract_address=None, event_name=None, from_block=0, to_block=None):
@@ -75,17 +78,21 @@ class EventLog:
 
     def load_logs(self, filename="event_logs.json"):
         try:
-            with open(filename, "r") as f:
-                data = json.load(f)
-                self.events = [ContractEvent.from_dict(e) for e in data.get("events", [])]
-                self.events_by_contract = {
-                    addr: [ContractEvent.from_dict(e) for e in events]
-                    for addr, events in data.get("events_by_contract", {}).items()
-                }
+            events = db.load_all_events()
+            self.events = []
+            self.events_by_contract = {}
+            for e in events:
+                event = ContractEvent(e["contract_address"], e["event_name"], e["data"])
+                event.block_number = e["block_number"]
+                event.timestamp = e["timestamp"]
+                self.events.append(event)
+                if event.contract_address not in self.events_by_contract:
+                    self.events_by_contract[event.contract_address] = []
+                self.events_by_contract[event.contract_address].append(event)
             return True
-        except FileNotFoundError:
+        except Exception as e:
+            print(f"Load error: {e}")
             return False
-
 
 event_log = EventLog()
 event_log.load_logs()

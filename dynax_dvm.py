@@ -4,6 +4,7 @@ DYNAX Virtual Machine (DVM) - Smart Contract System
 
 import hashlib
 import json
+import dynax_db as db
 import time
 from typing import Dict, List, Optional
 from dynax_events import event_log
@@ -102,24 +103,25 @@ class DVM:
         return [self.contracts[a].to_dict() for a in self.contract_list]
 
     def save_contracts(self, filename="contracts.json"):
-        data = {
-            "contracts": {a: c.to_dict() for a, c in self.contracts.items()},
-            "contract_list": self.contract_list
-        }
-        with open(filename, "w") as f:
-            json.dump(data, f, indent=2)
-
+        for addr in self.contracts:
+            c = self.contracts[addr]
+            db.save_contract(c.address, c.owner, c.code, c.storage, c.balance, c.created_at, 1)
     def load_contracts(self, filename="contracts.json"):
         try:
-            with open(filename, "r") as f:
-                data = json.load(f)
-                self.contracts = {a: DVMContract.from_dict(c) for a, c in data.get("contracts", {}).items()}
-                self.contract_list = data.get("contract_list", [])
+            contracts = db.load_all_contracts()
+            self.contracts = {}
+            self.contract_list = []
+            for c in contracts:
+                contract = DVMContract(c["address"], c["owner"], c["code"])
+                contract.storage = c["storage"]
+                contract.balance = c["balance"]
+                contract.created_at = c["created_at"]
+                self.contracts[contract.address] = contract
+                self.contract_list.append(contract.address)
             return True
-        except FileNotFoundError:
+        except Exception as e:
+            print(f"Load error: {e}")
             return False
-
-
 
     def execute_contract_with_events(self, address, method, args=None, caller=None, block_number=0):
         """Execute contract พร้อม emit events"""
