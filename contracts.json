@@ -5,7 +5,10 @@
       "owner": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3",
       "code": "contract HelloWorld { }",
       "storage": {
-        "msg": "Hello DYNAX"
+        "msg": "Hello DYNAX",
+        "new_key": "new_value",
+        "event_test": "Hello Events",
+        "event_test_2": "Events Working"
       },
       "balance": 0,
       "created_at": 1782818389
