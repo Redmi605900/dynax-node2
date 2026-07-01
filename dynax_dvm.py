@@ -46,7 +46,7 @@ class DVM:
     def generate_address(self, owner, nonce):
         raw = f"{owner}:{nonce}:{int(time.time())}"
         h = hashlib.sha3_256(raw.encode()).hexdigest()
-        return f"CX{h[:40]}"
+        return f"DX{h[:40]}"
 
     def deploy_contract(self, owner, code, nonce):
         try:
