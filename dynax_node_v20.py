@@ -1407,6 +1407,28 @@ def broadcast_block_signed(block):
             pass
 
 
+
+
+# Auto-mining thread
+MINER_ADDRESS = "dynax1qauto_miner"
+
+def auto_mine_loop():
+    """ขุด block อัตโนมัติทุก 10 วินาที"""
+    import time
+    time.sleep(30)  # รอ 30 วินาทีให้ node พร้อม
+    while True:
+        try:
+            result = node.mine(MINER_ADDRESS)
+            print(f"[AUTO-MINE] Block {result.get('block')} mined")
+            time.sleep(10)
+        except Exception as e:
+            print(f"[AUTO-MINE] Error: {e}")
+            time.sleep(30)
+
+# เริ่ม auto-mining
+threading.Thread(target=auto_mine_loop, daemon=True).start()
+print("[AUTO-MINE] Background mining started")
+
 app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)), debug=True)
 
 
