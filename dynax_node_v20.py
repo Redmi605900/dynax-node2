@@ -1413,16 +1413,35 @@ def broadcast_block_signed(block):
 MINER_ADDRESS = "dynax1qauto_miner"
 
 def auto_mine_loop():
-    """ขุด block อัตโนมัติทุก 10 วินาที"""
+    """ขุด block เฉพาะเมื่อมี pending transactions"""
     import time
-    time.sleep(30)  # รอ 30 วินาทีให้ node พร้อม
+    print("[AUTO-MINE] Smart mining thread started!", flush=True)
+    time.sleep(30)
+    
+    empty_rounds = 0
     while True:
         try:
-            result = node.mine(MINER_ADDRESS)
-            print(f"[AUTO-MINE] Block {result.get('block')} mined")
-            time.sleep(10)
+            # เช็คจำนวน pending transactions
+            pending_count = len(node.mempool)
+            
+            if pending_count > 0:
+                # มี transaction → ขุดเลย
+                print(f"[AUTO-MINE] Found {pending_count} pending txs, mining...", flush=True)
+                result = node.mine(MINER_ADDRESS)
+                print(f"[AUTO-MINE] Block {result.get('block')} mined", flush=True)
+                empty_rounds = 0
+                time.sleep(5)  # รอ 5 วินาทีหลังก่อนเช็คอีกครั้ง
+            else:
+                # ไม่มี transaction → รอ
+                empty_rounds += 1
+                if empty_rounds % 12 == 0:  # แสดง log ทุก 1 นาที
+                    print(f"[AUTO-MINE] No pending txs, waiting... (checked {empty_rounds} times)", flush=True)
+                time.sleep(5)  # เช็คทุก 5 วินาที
+                
         except Exception as e:
-            print(f"[AUTO-MINE] Error: {e}")
+            import traceback
+            print(f"[AUTO-MINE] Error: {e}", flush=True)
+            print(traceback.format_exc(), flush=True)
             time.sleep(30)
 
 # เริ่ม auto-mining
