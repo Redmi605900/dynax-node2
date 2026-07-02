@@ -103,7 +103,19 @@ class DynaxNode:
         clean_mempool()
         txs_pending = self.mempool[:50]
         total_fees = calc_total_fees(txs_pending)
-        reward = {"from": "SYSTEM", "to": miner, "amount": 50 + total_fees, "fee": 0, "timestamp": int(time.time())}
+        
+        # เช็ค max supply
+        total_mined = sum(
+            tx.get("amount", 0) 
+            for block in self.chain 
+            for tx in block.get("transactions", []) 
+            if tx.get("from") == "SYSTEM"
+        )
+        block_reward = 50 if total_mined + 50 <= 11000000 else max(0, 11000000 - total_mined)
+        if block_reward == 0 and total_fees == 0:
+            return {"error": "max supply reached"}
+        
+        reward = {"from": "SYSTEM", "to": miner, "amount": block_reward + total_fees, "fee": 0, "timestamp": int(time.time())}
 
         clean_mempool()
         txs = self.mempool[:50]
@@ -859,7 +871,13 @@ def get_difficulty(chain):
         return "0000"
     
     avg_time = time_taken / ADJUST_EVERY
-    current_zeros = len("0000")  # เริ่มจาก 4
+    
+    # อ่าน current_zeros จาก block ล่าสุดจริงๆ
+    last_diff = chain[-1].get("difficulty", "0000")
+    if isinstance(last_diff, int):
+        current_zeros = last_diff
+    else:
+        current_zeros = len(last_diff) if last_diff else 4
     
     # ปรับ difficulty
     if avg_time < TARGET_BLOCK_TIME * 0.5:
@@ -1010,12 +1028,36 @@ def is_duplicate_tx(tx):
                 return True
     return False
 
+
+def validate_timestamp(block, prev_block):
+    """ตรวจสอบ timestamp ของ block"""
+    import time as _t
+    now = int(_t.time())
+    block_ts = block.get("timestamp", 0)
+    prev_ts = prev_block.get("timestamp", 0) if prev_block else 0
+    
+    # block ต้องไม่อยู่ในอนาคตเกิน 2 นาที
+    if block_ts > now + 120:
+        return False, "block timestamp too far in future"
+    
+    # block ต้องใหม่กว่า prev block
+    if block_ts <= prev_ts:
+        return False, "block timestamp must be after previous block"
+    
+    return True, "ok"
+
 def validate_chain(chain):
     """ตรวจสอบ chain ว่าถูกต้องไหม"""
     import hashlib as _hl
     for i in range(1, len(chain)):
         block = chain[i]
         prev = chain[i-1]
+        
+        # เช็ค timestamp
+        valid_ts, ts_msg = validate_timestamp(block, prev)
+        if not valid_ts:
+            print(f"Invalid timestamp at block {i}: {ts_msg}")
+            return False
         
         # เช็ค previous hash
         if block.get("prev_hash") != prev.get("hash"):
