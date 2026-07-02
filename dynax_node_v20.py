@@ -104,10 +104,12 @@ class DynaxNode:
         txs_pending = self.mempool[:50]
         total_fees = calc_total_fees(txs_pending)
         reward = {"from": "SYSTEM", "to": miner, "amount": 50 + total_fees, "fee": 0, "timestamp": int(time.time())}
+
         clean_mempool()
         txs = self.mempool[:50]
         self.mempool = self.mempool[50:]
-                        prev_hash = self.chain[-1]["hash"] if self.chain else "0"*64
+
+        prev_hash = self.chain[-1]["hash"] if self.chain else "0"*64
         difficulty = get_difficulty(self.chain)
 
         block = {
@@ -130,8 +132,6 @@ class DynaxNode:
         self.chain.append(block)
         self.save_chain()
 
-  
-        
         # Broadcast new block to all peers
         for peer in list(self.peers):
             try:
@@ -139,7 +139,7 @@ class DynaxNode:
                 print(f"Broadcasted block {block['index']} to {peer}: {r.status_code}")
             except Exception as e:
                 print(f"Failed to broadcast to {peer}: {e}")
-        
+
         # Process contract transactions หลัง mine block
         self.process_contract_transactions(block)
 
@@ -665,7 +665,7 @@ def deploy_contract():
     node.mempool.append(tx)
     
     # คำนวณ contract address ล่วงหน้า (สำหรับ response)
-    raw = f"{owner}:{nonce}"  # ลบ timestamp ออก เพื่อให้ address deterministic
+    raw = f"{owner}:{nonce}:{int(time.time())}"
     h = hashlib.sha3_256(raw.encode()).hexdigest()
     contract_address = f"DX{h[:40]}"
     
@@ -829,10 +829,10 @@ def get_difficulty(chain):
     time_taken = recent[-1]["timestamp"] - recent[0]["timestamp"]
     
     if time_taken <= 0:
-        return chain[-1].get("difficulty", "0000")  # ใช้ difficulty เดิม ไม่ reset
+        return "0000"
     
     avg_time = time_taken / ADJUST_EVERY
-    current_zeros = len(chain[-1].get("difficulty", "0000"))  # อ่านจาก block ล่าสุด
+    current_zeros = len("0000")  # เริ่มจาก 4
     
     # ปรับ difficulty
     if avg_time < TARGET_BLOCK_TIME * 0.5:
