@@ -107,8 +107,18 @@ class DynaxNode:
         clean_mempool()
         txs = self.mempool[:50]
         self.mempool = self.mempool[50:]
-        prev_hash = self.chain[-1]["hash"] if self.chain else "0"*64
-        block = {"index": len(self.chain), "timestamp": int(time.time()), "transactions": [reward] + txs, "prev_hash": prev_hash, "nonce": 0}
+                        prev_hash = self.chain[-1]["hash"] if self.chain else "0"*64
+        difficulty = get_difficulty(self.chain)
+
+        block = {
+            "index": len(self.chain),
+            "timestamp": int(time.time()),
+            "transactions": [reward] + txs,
+            "prev_hash": prev_hash,
+            "difficulty": difficulty,
+            "nonce": 0
+        }
+
         while True:
             raw = json.dumps(block, sort_keys=True)
             h = hashlib.sha3_256(raw.encode()).hexdigest()
@@ -116,8 +126,11 @@ class DynaxNode:
                 block["hash"] = h
                 break
             block["nonce"] += 1
+
         self.chain.append(block)
         self.save_chain()
+
+  
         
         # Broadcast new block to all peers
         for peer in list(self.peers):
@@ -652,7 +665,7 @@ def deploy_contract():
     node.mempool.append(tx)
     
     # คำนวณ contract address ล่วงหน้า (สำหรับ response)
-    raw = f"{owner}:{nonce}:{int(time.time())}"
+    raw = f"{owner}:{nonce}"  # ลบ timestamp ออก เพื่อให้ address deterministic
     h = hashlib.sha3_256(raw.encode()).hexdigest()
     contract_address = f"DX{h[:40]}"
     
@@ -816,10 +829,10 @@ def get_difficulty(chain):
     time_taken = recent[-1]["timestamp"] - recent[0]["timestamp"]
     
     if time_taken <= 0:
-        return "0000"
+        return chain[-1].get("difficulty", "0000")  # ใช้ difficulty เดิม ไม่ reset
     
     avg_time = time_taken / ADJUST_EVERY
-    current_zeros = len("0000")  # เริ่มจาก 4
+    current_zeros = len(chain[-1].get("difficulty", "0000"))  # อ่านจาก block ล่าสุด
     
     # ปรับ difficulty
     if avg_time < TARGET_BLOCK_TIME * 0.5:
@@ -1394,7 +1407,7 @@ def broadcast_block_signed(block):
             pass
 
 
-app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)))
+app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)), debug=True)
 
 
 
