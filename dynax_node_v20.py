@@ -432,15 +432,42 @@ def snapshot():
 @app.route("/stats")
 def stats():
     chain = node.chain
-    txs = sum(len(node.get_txs(b)) for b in chain)
+    if not chain:
+        return jsonify({"error": "Empty chain"}), 500
+    
+    # คำนวณจำนวน transactions ทั้งหมด
+    txs = sum(len(b.get("transactions", [])) for b in chain)
+    
+    # อ่าน difficulty จาก block ล่าสุด
+    last_block = chain[-1]
+    difficulty = last_block.get("difficulty", "0000")
+    
+    # คำนวณ average block time
+    if len(chain) > 1:
+        time_diff = chain[-1]["timestamp"] - chain[0]["timestamp"]
+        avg_block_time = time_diff / (len(chain) - 1)
+    else:
+        avg_block_time = 0
+    
+    # คำนวณ total supply (จาก coinbase transactions)
+    total_supply = sum(
+        tx.get("amount", 0) 
+        for b in chain 
+        for tx in b.get("transactions", []) 
+        if tx.get("from") == "SYSTEM"
+    )
+    
     return jsonify({
         "blocks": len(chain),
         "transactions": txs,
         "nodes": len(node.peers) + 1,
-        "difficulty": "0000",
+        "difficulty": difficulty,
+        "avg_block_time": round(avg_block_time, 2),
+        "total_supply": total_supply,
         "symbol": "DYX",
         "reward": 50,
-        "status": "online"
+        "status": "online",
+        "last_block_hash": last_block.get("hash", "")[:16] + "..."
     })
 
 @app.route("/peers")
