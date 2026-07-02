@@ -95,7 +95,7 @@ class DynaxNode:
         msg_dict = {"amount": amount, "fee": fee, "from": sender, "to": receiver}
         msg_text = json.dumps(msg_dict, sort_keys=True, separators=(",", ":"))
         if not verify_signature(sender, msg_text, signature): return {"error": "invalid signature"}
-        tx = {"from": sender, "to": receiver, "amount": amount, "fee": fee, "signature": signature, "timestamp": int(time.time())}
+        tx = {"type": "transfer", "from": sender, "to": receiver, "amount": amount, "fee": fee, "signature": signature, "timestamp": int(time.time())}
         self.mempool.append(tx)
         return {"status": "queued", "tx": tx}
 
@@ -112,7 +112,6 @@ class DynaxNode:
         while True:
             raw = json.dumps(block, sort_keys=True)
             h = hashlib.sha3_256(raw.encode()).hexdigest()
-            difficulty = get_difficulty(self.chain)
             if h.startswith(difficulty):
                 block["hash"] = h
                 break
@@ -128,7 +127,88 @@ class DynaxNode:
             except Exception as e:
                 print(f"Failed to broadcast to {peer}: {e}")
         
+        # Process contract transactions หลัง mine block
+        self.process_contract_transactions(block)
+
         return {"status": "mined", "block": block["index"]}
+
+
+    def process_contract_transactions(self, block):
+        """Process contract transactions ใน block"""
+        for tx in block.get("transactions", []):
+            tx_type = tx.get("type", "transfer")
+            
+            if tx_type == "contract_deploy":
+                # Deploy contract
+                owner = tx.get("from")
+                code = tx.get("code")
+                nonce = tx.get("nonce", 0)
+                result = dvm.deploy_contract(owner, code, nonce)
+                if result.get("status") == "deployed":
+                    print(f"Contract deployed: {result.get('address')}")
+                    event_log.emit(
+                        contract_address=result.get("address"),
+                        event_name="ContractDeployed",
+                        data={"owner": owner, "code_size": len(code)},
+                        block_number=block.get("index")
+                    )
+            
+            elif tx_type == "contract_call":
+                # Execute contract
+                contract_addr = tx.get("to")
+                method = tx.get("method")
+                args = tx.get("args", [])
+                caller = tx.get("from")
+                result = dvm.execute_contract_with_events(
+                    contract_addr, method, args, caller,
+                    block_number=block.get("index")
+                )
+                print(f"Contract called: {contract_addr}.{method} = {result}")
+        
+        # Save DVM state หลัง process ทั้งหมด
+        dvm.save_contracts()
+        event_log.save_logs()
+
+
+def rebuild_dvm_state():
+    """Rebuild DVM state จาก chain (replay transactions)"""
+    print("Rebuilding DVM state from chain...")
+    
+    # ใช้ dvm global ที่มีอยู่แล้ว และ clear contracts
+    global dvm
+    dvm.contracts = {}
+    dvm.contract_list = []
+    
+    # Replay ทุก block ใน chain
+    for block in node.chain:
+        for tx in block.get("transactions", []):
+            tx_type = tx.get("type", "transfer")
+            
+            if tx_type == "contract_deploy":
+                owner = tx.get("from")
+                code = tx.get("code")
+                nonce = tx.get("nonce", 0)
+                dvm.deploy_contract(owner, code, nonce)
+            
+            elif tx_type == "contract_call":
+                contract_addr = tx.get("to")
+                method = tx.get("method")
+                args = tx.get("args", [])
+                caller = tx.get("from")
+                dvm.execute_contract(contract_addr, method, args, caller)
+    
+    print(f"DVM state rebuilt: {len(dvm.contract_list)} contracts")
+    return dvm
+
+
+@app.route("/dvm/rebuild", methods=["POST"])
+def rebuild_dvm():
+    """Rebuild DVM state จาก chain"""
+    rebuild_dvm_state()
+    return jsonify({
+        "status": "rebuilt",
+        "contracts": len(dvm.contract_list)
+    })
 
 node = DynaxNode()
 
@@ -553,13 +633,36 @@ def deploy_contract():
     owner = data.get("owner")
     code = data.get("code")
     nonce = data.get("nonce", 0)
-    
+    signature = data.get("signature", "")
+
     if not owner or not code:
         return jsonify({"error": "Need owner and code"}), 400
+
+    # สร้าง contract deploy transaction
+    tx = {
+        "type": "contract_deploy",
+        "from": owner,
+        "code": code,
+        "nonce": nonce,
+        "timestamp": int(time.time()),
+        "signature": signature
+    }
     
-    result = dvm.deploy_contract(owner, code, nonce)
-    dvm.save_contracts()
-    return jsonify(result)
+    # เพิ่มเข้า mempool
+    node.mempool.append(tx)
+    
+    # คำนวณ contract address ล่วงหน้า (สำหรับ response)
+    raw = f"{owner}:{nonce}:{int(time.time())}"
+    h = hashlib.sha3_256(raw.encode()).hexdigest()
+    contract_address = f"DX{h[:40]}"
+    
+    return jsonify({
+        "status": "queued",
+        "contract_address": contract_address,
+        "tx": tx,
+        "mempool_size": len(node.mempool)
+    })
+
 
 @app.route("/dvm/execute", methods=["POST"])
 def execute_contract():
@@ -892,12 +995,16 @@ def validate_chain(chain):
         
         # เช็ค PoW (hash ต้องขึ้นต้นด้วย 0000)
         expected_diff = get_difficulty(chain[:i])
-        # ตรวจ difficulty ใน block ต้องตรงกับที่คำนวณได้
-        if block.get("difficulty") and block["difficulty"] != expected_diff:
-            print(f"Invalid difficulty at block {i}: expected {expected_diff} got {block['difficulty']}")
+        # รองรับทั้ง difficulty แบบเก่า (int) และแบบใหม่ (string)
+        block_diff = block.get("difficulty")
+        if isinstance(block_diff, int):
+            block_target = "0" * block_diff
+        else:
+            block_target = block_diff or expected_diff
+        if block_target != expected_diff:
+            print(f"Invalid difficulty at block {i}: expected {expected_diff} got {block_diff}")
             return False
-        # ตรวจ hash ต้องผ่าน PoW ตาม expected difficulty
-        if not block.get("hash", "").startswith(expected_diff):
+        if not block.get("hash", "").startswith(block_target):
             print(f"Invalid PoW at block {i}")
             return False
     
