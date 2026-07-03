@@ -1,0 +1,28 @@
+DYNAX STATUS
+
+Current chain height: ~730 blocks
+Hash algorithm: SHA3-256
+Network: DYNAX
+Node version: v20
+
+Known assets:
+- dynax_chain.json
+- peers.json
+- dynax.db
+- contracts.json
+- genesis.json
+
+Current objective:
+- Build DYNAX Core v21
+- Keep existing chain
+- Keep existing website
+- Preserve API compatibility:
+  /stats
+  /chain
+  /peers
+  /mempool
+
+Migration strategy:
+- Do NOT modify working v20
+- Create modular v21
+- Migrate components gradually
