@@ -111,7 +111,9 @@ class DynaxNode:
             for tx in block.get("transactions", []) 
             if tx.get("from") == "SYSTEM"
         )
-        block_reward = 50 if total_mined + 50 <= 11000000 else max(0, 11000000 - total_mined)
+        block_reward = get_block_reward(len(self.chain))
+        if total_mined + block_reward > 11000000:
+            block_reward = max(0, 11000000 - total_mined)
         if block_reward == 0 and total_fees == 0:
             return {"error": "max supply reached"}
         
@@ -854,6 +856,22 @@ def receive_tx():
     # relay ต่อไปยัง peer อื่น
     threading.Thread(target=broadcast_tx, args=(tx,), daemon=True).start()
     return jsonify({"status": "received", "mempool_size": len(node.mempool)})
+
+
+def get_block_reward(height):
+    """
+    คำนวณ Block Reward ตาม Halving
+    ปัจจุบันยังได้ 50 DYX จนกว่าจะถึงรอบ Halving
+    """
+    INITIAL_REWARD = 50.0
+    HALVING_INTERVAL = 210000
+
+    halvings = height // HALVING_INTERVAL
+
+    if halvings >= 64:
+        return 0.0
+
+    return INITIAL_REWARD / (2 ** halvings)
 
 
 def get_difficulty(chain):
