@@ -130,6 +130,7 @@ class DynaxNode:
             "transactions": [reward] + txs,
             "prev_hash": prev_hash,
             "difficulty": difficulty,
+            "merkle_root": merkle_root([reward] + txs),
             "nonce": 0
         }
 
@@ -1046,6 +1047,36 @@ def validate_timestamp(block, prev_block):
     
     return True, "ok"
 
+
+def merkle_root(transactions):
+    """คำนวณ Merkle Root จาก transactions"""
+    import hashlib as _hl
+    if not transactions:
+        return "0" * 64
+    hashes = [_hl.sha3_256(
+        json.dumps(tx, sort_keys=True).encode()
+    ).hexdigest() for tx in transactions]
+    while len(hashes) > 1:
+        if len(hashes) % 2 != 0:
+            hashes.append(hashes[-1])
+        hashes = [
+            _hl.sha3_256((hashes[i]+hashes[i+1]).encode()).hexdigest()
+            for i in range(0, len(hashes), 2)
+        ]
+    return hashes[0]
+
+def validate_timestamp(block, prev_block):
+    """ตรวจสอบ timestamp"""
+    import time as _t
+    now = int(_t.time())
+    block_ts = block.get("timestamp", 0)
+    prev_ts = prev_block.get("timestamp", 0) if prev_block else 0
+    if block_ts > now + 120:
+        return False, "too far in future"
+    if block_ts <= prev_ts:
+        return False, "must be after previous block"
+    return True, "ok"
+
 def validate_chain(chain):
     """ตรวจสอบ chain ว่าถูกต้องไหม"""
     import hashlib as _hl
@@ -1059,6 +1090,11 @@ def validate_chain(chain):
             print(f"Invalid timestamp at block {i}: {ts_msg}")
             return False
         
+        # เช็ค timestamp
+        valid_ts, msg = validate_timestamp(block, prev)
+        if not valid_ts:
+            print(f"Invalid timestamp block {i}: {msg}")
+            return False
         # เช็ค previous hash
         if block.get("prev_hash") != prev.get("hash"):
             print(f"Invalid prev_hash at block {i}")
