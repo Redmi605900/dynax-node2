@@ -12,9 +12,18 @@
       },
       "balance": 0,
       "created_at": 1782818389
+    },
+    "CX26aa1aec44e710e43aef66be241d485da4be2829": {
+      "address": "CX26aa1aec44e710e43aef66be241d485da4be2829",
+      "owner": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3",
+      "code": "contract DYXToken { string name = \"DYNAX Token\"; string symbol = \"DYX\"; uint256 totalSupply = 1000000; mapping balances; function init() { balances[caller] = totalSupply; } function balanceOf(account) { return balances[account]; } function transfer(to, amount) { if balances[caller] < amount { return {\"status\": \"error\"}; } balances[caller] = balances[caller] - amount; balances[to] = balances[to] + amount; return {\"status\": \"success\"}; } }",
+      "storage": {},
+      "balance": 0,
+      "created_at": 1782892069
     }
   },
   "contract_list": [
-    "CX99fe29111215407c74dbdb8b162ccd60fbed04a9"
+    "CX99fe29111215407c74dbdb8b162ccd60fbed04a9",
+    "CX26aa1aec44e710e43aef66be241d485da4be2829"
   ]
 }

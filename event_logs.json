@@ -1,29 +1,67 @@
 {
   "events": [
     {
-      "contract_address": "CX99fe29111215407c74dbdb8b162ccd60fbed04a9",
-      "event_name": "StorageChanged",
+      "contract_address": "DX632500eb4f05627329bf5975784b2ad0bc177fc3",
+      "event_name": "ContractDeployed",
       "data": {
-        "key": "event_test_2",
-        "value": "Events Working",
-        "caller": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3"
+        "owner": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3",
+        "code_size": 46
       },
-      "timestamp": 1782829902,
-      "block_number": 726
+      "timestamp": 1782911407,
+      "block_number": 727
+    },
+    {
+      "contract_address": "CX123",
+      "event_name": "TestEvent",
+      "data": {
+        "key": "value"
+      },
+      "timestamp": 1782894149,
+      "block_number": 1
+    },
+    {
+      "contract_address": "CX123",
+      "event_name": "Transfer",
+      "data": {
+        "from": "A",
+        "to": "B"
+      },
+      "timestamp": 1234567890,
+      "block_number": 1
     }
   ],
   "events_by_contract": {
-    "CX99fe29111215407c74dbdb8b162ccd60fbed04a9": [
+    "DX632500eb4f05627329bf5975784b2ad0bc177fc3": [
       {
-        "contract_address": "CX99fe29111215407c74dbdb8b162ccd60fbed04a9",
-        "event_name": "StorageChanged",
+        "contract_address": "DX632500eb4f05627329bf5975784b2ad0bc177fc3",
+        "event_name": "ContractDeployed",
         "data": {
-          "key": "event_test_2",
-          "value": "Events Working",
-          "caller": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3"
+          "owner": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3",
+          "code_size": 46
         },
-        "timestamp": 1782829902,
-        "block_number": 726
+        "timestamp": 1782911407,
+        "block_number": 727
+      }
+    ],
+    "CX123": [
+      {
+        "contract_address": "CX123",
+        "event_name": "TestEvent",
+        "data": {
+          "key": "value"
+        },
+        "timestamp": 1782894149,
+        "block_number": 1
+      },
+      {
+        "contract_address": "CX123",
+        "event_name": "Transfer",
+        "data": {
+          "from": "A",
+          "to": "B"
+        },
+        "timestamp": 1234567890,
+        "block_number": 1
       }
     ]
   }
