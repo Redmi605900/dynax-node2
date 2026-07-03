@@ -123,6 +123,8 @@ class DynaxNode:
 
         prev_hash = self.chain[-1]["hash"] if self.chain else "0"*64
         difficulty = get_difficulty(self.chain)
+        if not difficulty:
+            difficulty = "0000"
 
         block = {
             "index": len(self.chain),
