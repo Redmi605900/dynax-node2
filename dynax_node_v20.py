@@ -1552,7 +1552,7 @@ def auto_mine_loop():
 threading.Thread(target=auto_mine_loop, daemon=True).start()
 print("[AUTO-MINE] Background mining started")
 
-#app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)), debug=True)
+app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)), debug=True)
 
 
 
