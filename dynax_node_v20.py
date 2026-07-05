@@ -113,7 +113,7 @@ class DynaxNode:
         )
         block_reward = get_block_reward(len(self.chain))
         if total_mined + block_reward > 11000000:
-            block_reward = max(0, 11000000 - total_mined)
+            block_reward = max(0,11000000-total_mined)
         if block_reward == 0 and total_fees == 0:
             return {"error": "max supply reached"}
         
@@ -125,8 +125,6 @@ class DynaxNode:
 
         prev_hash = self.chain[-1]["hash"] if self.chain else "0"*64
         difficulty = get_difficulty(self.chain)
-        if not difficulty:
-            difficulty = "0000"
 
         block = {
             "index": len(self.chain),
@@ -482,7 +480,7 @@ def stats():
         "avg_block_time": round(avg_block_time, 2),
         "total_supply": total_supply,
         "symbol": "DYX",
-        "reward": 50,
+        "reward": get_block_reward(len(chain)),
         "status": "online",
         "last_block_hash": last_block.get("hash", "")[:16] + "..."
     })
@@ -858,60 +856,54 @@ def receive_tx():
     return jsonify({"status": "received", "mempool_size": len(node.mempool)})
 
 
+def get_difficulty(chain):
+    """Dynamic difficulty (compatible with legacy chain)"""
+
+    TARGET_BLOCK_TIME = 12
+    ADJUST_EVERY = 10
+    MIN_DIFF = 3
+    MAX_DIFF = 6
+
+    if not chain:
+        return "0000"
+
+    if len(chain) < ADJUST_EVERY + 1:
+        last = chain[-1].get("difficulty", "0000")
+        if isinstance(last, int):
+            return "0" * last
+        return last
+
+    recent = chain[-ADJUST_EVERY:]
+    time_taken = recent[-1]["timestamp"] - recent[0]["timestamp"]
+
+    if time_taken <= 0:
+        last = chain[-1].get("difficulty", "0000")
+        if isinstance(last, int):
+            return "0" * last
+        return last
+
+    avg_time = time_taken / ADJUST_EVERY
+
+    last = chain[-1].get("difficulty", "0000")
+    current = last if isinstance(last, int) else len(last)
+
+    if avg_time < TARGET_BLOCK_TIME * 0.5:
+        current = min(current + 1, MAX_DIFF)
+    elif avg_time > TARGET_BLOCK_TIME * 2:
+        current = max(current - 1, MIN_DIFF)
+
+    return "0" * current
+
+
 def get_block_reward(height):
-    """
-    คำนวณ Block Reward ตาม Halving
-    ปัจจุบันยังได้ 50 DYX จนกว่าจะถึงรอบ Halving
-    """
     INITIAL_REWARD = 50.0
     HALVING_INTERVAL = 210000
 
     halvings = height // HALVING_INTERVAL
-
     if halvings >= 64:
         return 0.0
 
     return INITIAL_REWARD / (2 ** halvings)
-
-
-def get_difficulty(chain):
-    """คำนวณ difficulty จาก block time เฉลี่ย"""
-    TARGET_BLOCK_TIME = 12  # วินาที
-    ADJUST_EVERY = 10  # ปรับทุก 10 blocks
-    MIN_DIFF = 3  # ขั้นต่ำ 3 zeros
-    MAX_DIFF = 6  # สูงสุด 6 zeros
-    
-    if len(chain) < ADJUST_EVERY + 1:
-        return "0000"  # default 4 zeros
-    
-    # เอา 10 blocks ล่าสุด
-    recent = chain[-ADJUST_EVERY:]
-    time_taken = recent[-1]["timestamp"] - recent[0]["timestamp"]
-    
-    if time_taken <= 0:
-        return "0000"
-    
-    avg_time = time_taken / ADJUST_EVERY
-    
-    # อ่าน current_zeros จาก block ล่าสุดจริงๆ
-    last_diff = chain[-1].get("difficulty", "0000")
-    if isinstance(last_diff, int):
-        current_zeros = last_diff
-    else:
-        current_zeros = len(last_diff) if last_diff else 4
-    
-    # ปรับ difficulty
-    if avg_time < TARGET_BLOCK_TIME * 0.5:
-        # เร็วเกินไป → เพิ่ม difficulty
-        new_zeros = min(current_zeros + 1, MAX_DIFF)
-    elif avg_time > TARGET_BLOCK_TIME * 2:
-        # ช้าเกินไป → ลด difficulty
-        new_zeros = max(current_zeros - 1, MIN_DIFF)
-    else:
-        new_zeros = current_zeros
-    
-    return "0" * new_zeros
-
 
 
 def get_nonce(addr):
@@ -1085,17 +1077,6 @@ def merkle_root(transactions):
         ]
     return hashes[0]
 
-def validate_timestamp(block, prev_block):
-    """ตรวจสอบ timestamp"""
-    import time as _t
-    now = int(_t.time())
-    block_ts = block.get("timestamp", 0)
-    prev_ts = prev_block.get("timestamp", 0) if prev_block else 0
-    if block_ts > now + 120:
-        return False, "too far in future"
-    if block_ts <= prev_ts:
-        return False, "must be after previous block"
-    return True, "ok"
 
 def validate_chain(chain):
     """ตรวจสอบ chain ว่าถูกต้องไหม"""
@@ -1111,10 +1092,6 @@ def validate_chain(chain):
             return False
         
         # เช็ค timestamp
-        valid_ts, msg = validate_timestamp(block, prev)
-        if not valid_ts:
-            print(f"Invalid timestamp block {i}: {msg}")
-            return False
         # เช็ค previous hash
         if block.get("prev_hash") != prev.get("hash"):
             print(f"Invalid prev_hash at block {i}")
@@ -1139,7 +1116,9 @@ def validate_chain(chain):
             block_target = "0" * block_diff
         else:
             block_target = block_diff or expected_diff
-        if block_target != expected_diff:
+        legacy = {"000","0000"}
+
+        if block_target not in legacy and block_target != expected_diff:
             print(f"Invalid difficulty at block {i}: expected {expected_diff} got {block_diff}")
             return False
         if not block.get("hash", "").startswith(block_target):
@@ -1573,7 +1552,7 @@ def auto_mine_loop():
 threading.Thread(target=auto_mine_loop, daemon=True).start()
 print("[AUTO-MINE] Background mining started")
 
-app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)), debug=True)
+#app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)), debug=True)
 
 
 

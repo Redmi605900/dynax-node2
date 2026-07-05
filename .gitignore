@@ -1,0 +1,25 @@
+# Cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Backup files (เก็บไว้ในเครื่อง แต่ไม่เข้า Git)
+*_BACKUP.py
+*_backup.py
+*_broken_backup.py
+backup_*.py
+backups/
+
+# Logs & Status
+*.log
+DYNAX_STATUS*.txt
+
+# Experimental
+dynax_core_v21/
+
+# Environment
+.env
+venv/
+
+# ️ JSON files ต้องถูก track! (ห้าม ignore)
+# dynax_chain.json, peers.json, mempool.json ต้องอยู่ใน Git
