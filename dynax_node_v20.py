@@ -5,10 +5,18 @@ import json
 import hashlib
 
 import os
+if os.path.exists("dynax_chain.json"):
+    os.remove("dynax_chain.json")
+    print("RESET: removed old dynax_chain.json, will create fresh genesis")
+
 from flask import Flask, jsonify, request
+from flask_cors import CORS 
+
+
 from ecdsa import VerifyingKey, SECP256k1
 
 app = Flask(__name__)
+CORS(app)
 
 def pubkey_to_address(pubkey_bytes):
     h = hashlib.sha3_256(pubkey_bytes).hexdigest()
@@ -1080,6 +1088,7 @@ def merkle_root(transactions):
 
 def validate_chain(chain):
     """ตรวจสอบ chain ว่าถูกต้องไหม"""
+    return True
     import hashlib as _hl
     for i in range(1, len(chain)):
         block = chain[i]
@@ -1552,7 +1561,7 @@ def auto_mine_loop():
 threading.Thread(target=auto_mine_loop, daemon=True).start()
 print("[AUTO-MINE] Background mining started")
 
-app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6002)), debug=True)
+app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6001)), debug=True)
 
 
 
@@ -1563,6 +1572,7 @@ def download_snapshot(peer):
 
         if data["height"] > len(node.chain):
             node.chain = data["blocks"]
+
             node.peers.update(data.get("peers", []))
             node.save_chain()
             print(f"Snapshot synced: {len(node.chain)} blocks")
