@@ -1,4 +1,4 @@
 flask
 ecdsa
 requests
-flask-corsflask-cors
+flask-cors
