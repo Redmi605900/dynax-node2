@@ -3,12 +3,11 @@ import requests
 import threading
 import json
 import hashlib
-
 import os
 if os.path.exists("dynax_chain.json"):
     os.remove("dynax_chain.json")
     print("RESET: removed old dynax_chain.json, will create fresh genesis")
-
+    
 from flask import Flask, jsonify, request
 from flask_cors import CORS 
 
