@@ -1,0 +1,29 @@
+{
+  "index": 0,
+  "timestamp": 1780771234,
+  "transactions": [
+    {
+      "from": "GENESIS",
+      "to": "DXa5ae9ccc94279d4f52b4f4e694a5a3b2f4f5ece3",
+      "amount": 300000
+    },
+    {
+      "from": "GENESIS",
+      "to": "DX2cd2db91dd4e11e56b3a90e8219b9b11f16d498d",
+      "amount": 7000
+    },
+    {
+      "from": "GENESIS",
+      "to": "DXb2913cfc7756e6675fadbcb35cd595e680b330d3",
+      "amount": 445
+    },
+    {
+      "from": "GENESIS",
+      "to": "DXe0e2eb885049e91123a0ab6f4bf62064d4572170",
+      "amount": 137
+    }
+  ],
+  "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "nonce": 0,
+  "hash": "e18aebbf7ad8880153e05ae83851d3bd65cf33a39512fb1f302e6fe04aec39d2"
+}
