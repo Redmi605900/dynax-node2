@@ -1346,7 +1346,7 @@ def initial_snapshot_sync():
             pass
 
 #threading.Thread(target=initial_snapshot_sync, daemon=True).start()
-print("Snapshot sync initialized")
+print("Snapshot sync disabled temporarily")
 
 
 def sync_mempool_from_peers():
