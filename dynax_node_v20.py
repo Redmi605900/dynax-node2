@@ -1345,7 +1345,7 @@ def initial_snapshot_sync():
         except:
             pass
 
-threading.Thread(target=initial_snapshot_sync, daemon=True).start()
+#threading.Thread(target=initial_snapshot_sync, daemon=True).start()
 print("Snapshot sync initialized")
 
 
