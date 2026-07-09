@@ -719,6 +719,8 @@ def deploy_contract():
     contract_address = f"DX{h[:40]}"
     
     return jsonify({
+
+    
         "status": "queued",
         "contract_address": contract_address,
         "tx": tx,
@@ -889,7 +891,7 @@ def get_difficulty(chain):
             return "0" * last
         return last
 
-    avg_time = time_taken / ADJUST_EVERY
+    avg_time = time_taken / (ADJUST_EVERY-1)
 
     last = chain[-1].get("difficulty", "0000")
     current = last if isinstance(last, int) else len(last)
