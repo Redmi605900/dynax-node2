@@ -478,9 +478,18 @@ def stats():
         for tx in b.get("transactions", []) 
         if tx.get("from") == "SYSTEM"
     )
-    
+    try:
+        import json
+        with open("node_identity.json") as f:
+            identity = json.load(f)
+    except Exception:
+        identity = {}
+
     return jsonify({
         "blocks": len(chain),
+        "node_id": identity.get("node_id", ""),
+        "uuid": identity.get("uuid", ""),
+        "fingerprint": identity.get("fingerprint", ""),
         "transactions": txs,
         "nodes": len(node.peers) + 1,
         "difficulty": difficulty,
@@ -517,10 +526,12 @@ def receive_block():
             return jsonify({"error": "invalid tx signature"}), 400
     if any(b["index"] == block["index"] for b in node.chain):
         return jsonify({"status": "already have"}), 200
-    # เช็ก prev_hash ต่อกัน
     if node.chain and block.get("prev_hash") != node.chain[-1]["hash"]:
         return jsonify({"error": "invalid prev_hash"}), 400
+    if not validate_block_balances(block, node.chain):
+        return jsonify({"error": "insufficient balance in block"}), 400
     node.chain.append(block)
+    update_pubkey_cache_from_block(block)
     node.save_chain()
     return jsonify({"status": "accepted", "block": block["index"]})
 
@@ -968,44 +979,72 @@ def reorg_chain(new_chain):
 
 
 
+PUBKEY_CACHE = {}
+
+def update_pubkey_cache_from_block(block):
+    for t in block.get("transactions", []):
+        s = t.get("from")
+        pk = t.get("public_key")
+        if s and pk and s not in PUBKEY_CACHE:
+            PUBKEY_CACHE[s] = pk
+
 def verify_tx_signature(tx):
-    """ตรวจสอบ signature ของ transaction"""
     try:
-        from ecdsa import VerifyingKey, SECP256k1, BadSignatureError
+        from ecdsa import VerifyingKey, SECP256k1
         import hashlib as _hl
-        
         sender = tx.get("from")
-        if sender in ("SYSTEM", "GENESIS", "DEX"):
+        if sender in ("SYSTEM", "GENESIS", "DEX", "NETWORK"):
             return True
-            
         signature = tx.get("signature")
         if not signature:
             return False
-            
-        # หา public key จาก chain
-        pub_hex = None
-        for block in node.chain:
-            for t in block.get("transactions", []):
-                if t.get("from") == sender and t.get("public_key"):
-                    pub_hex = t["public_key"]
-                    break
-                    
+        pub_hex = PUBKEY_CACHE.get(sender)
         if not pub_hex:
-            return True  # ยังไม่มี tx เก่า ผ่านไปก่อน
-            
-        msg = _hl.sha3_256(
-            __import__("json").dumps(
-                {"amount": tx["amount"], "fee": tx.get("fee",0), 
-                 "from": tx["from"], "to": tx["to"]}, 
-                sort_keys=True, separators=(",",":")
-            ).encode()
-        ).digest()
-        
-        vk = VerifyingKey.from_string(bytes.fromhex(pub_hex), curve=SECP256k1)
+            pub_hex = tx.get("public_key")
+        if not pub_hex:
+            for block in node.chain:
+                for t in block.get("transactions", []):
+                    if t.get("from") == sender and t.get("public_key"):
+                        pub_hex = t["public_key"]
+                        PUBKEY_CACHE[sender] = pub_hex
+        if not pub_hex:
+            print(f"DEBUG: reject tx from {sender} - no public_key")
+            return False
+        pub_bytes = bytes.fromhex(pub_hex)
+        derived = pubkey_to_address(pub_bytes)
+        if derived.lower() != sender.lower():
+            print(f"DEBUG: reject tx - pubkey mismatch {sender}")
+            return False
+        msg = _hl.sha3_256(__import__("json").dumps({"amount": tx["amount"], "fee": tx.get("fee",0), "from": tx["from"], "to": tx["to"]}, sort_keys=True, separators=(",",":")).encode()).digest()
+        vk = VerifyingKey.from_string(pub_bytes, curve=SECP256k1)
         vk.verify(bytes.fromhex(signature), msg)
         return True
-    except:
+    except Exception as e:
+        print(f"DEBUG: sig verify error: {e}")
         return False
+
+def validate_block_balances(block, chain_before_block):
+    spent = {}
+    for tx in block.get("transactions", []):
+        sender = tx.get("from")
+        if sender in ("SYSTEM", "GENESIS", "DEX", "NETWORK"):
+            continue
+        amount = float(tx.get("amount", 0))
+        fee = float(tx.get("fee", 0))
+        need = amount + fee
+        bal = 0
+        for b in chain_before_block:
+            for t in b.get("transactions", []):
+                if t.get("to") == sender:
+                    bal += float(t.get("amount", 0))
+                if t.get("from") == sender:
+                    bal -= float(t.get("amount", 0)) + float(t.get("fee", 0))
+        used = spent.get(sender, 0)
+        if bal - used < need:
+            print(f"DEBUG: reject block - {sender} low balance")
+            return False
+        spent[sender] = used + need
+    return True
 
 def calc_total_fees(txs):
     """คำนวณ fee รวมจาก transactions"""
@@ -1171,18 +1210,36 @@ peer_failures = {}
 def save_peers():
     try:
         import json as _j
+
         with peer_lock:
-            _j.dump(list(node.peers), open(PEERS_FILE, "w"))
-    except: pass
+            peers = list(node.peers)
+
+        # ไม่บันทึกถ้าไม่มี Peer
+        if len(peers) == 0:
+            print("Skip saving empty peers list")
+            return
+
+        with open(PEERS_FILE, "w") as f:
+            _j.dump(peers, f, indent=2)
+
+    except Exception as e:
+        print("save_peers:", e)
 
 def load_peers():
     try:
         import json as _j
-        peers = _j.load(open(PEERS_FILE))
+
+        with open(PEERS_FILE) as f:
+            peers = _j.load(f)
+
         for p in peers:
-            node.peers.add(p)
-        print(f"Loaded {len(peers)} peers")
-    except: pass
+            if is_valid_peer(p):
+                node.peers.add(p)
+
+        print(f"Loaded {len(node.peers)} peers")
+
+    except Exception as e:
+        print("load_peers:", e)
 
 def is_valid_peer(url):
     if not url: return False
@@ -1560,7 +1617,7 @@ def auto_mine_loop():
 threading.Thread(target=auto_mine_loop, daemon=True).start()
 print("[AUTO-MINE] Background mining started")
 
-app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6001)), debug=True)
+app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 6001)), debug=False, use_reloader=False) 
 
 
 
